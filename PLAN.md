@@ -79,10 +79,29 @@ which the draw layer depends on.
 
 **Phase 3 — Context, style, window, panel, layout** 🚧 in progress
 `style.zig` ✅ (all style structs + default dark theme; `StyleItem` tagged
-union, `Align` packed flags). Remaining: `context.zig`, `panel.zig`,
-`window.zig`, `layout.zig`, `group.zig`, plus the deferred `pool`/
-`page_element`. These structs are mutually referential (context↔window↔panel)
-so they land together. Headless smoke tests (begin/layout/end).
+union, `Align` packed flags). `hash.zig` ✅ (MurmurHash3 for window/widget ids).
+Remaining: `context.zig`, `panel.zig`, `window.zig`, `layout.zig`, `group.zig`.
+These structs are mutually referential (context↔window↔panel) so they land
+together. Headless smoke tests (begin/layout/end).
+
+Memory-model decisions for the idiomatic core (replacing Nuklear's
+pool/page/freelist machinery):
+- **No `nk_pool`/`nk_page_element`.** Windows/panels/tables are allocated
+  directly via `std.mem.Allocator`. (The deferred `pool`/`page_element` port is
+  thus dropped — superseded by idiomatic allocation.)
+- **Windows**: owned by `Context`; looked up by name via
+  `std.StringHashMapUnmanaged(*Window)` (or hashed id), kept in an explicit
+  z-order list. Replaces the `begin/end/prev/next` intrusive list.
+- **Per-window widget state** (`nk_table`: hash→u32 for scroll offsets, tree
+  collapse states): an `AutoHashMapUnmanaged` with per-entry `seq` for the
+  end-of-frame GC. Nuklear hands out interior `nk_uint*` that the panel writes
+  through; the port will instead resolve by id at panel begin/end (so the API
+  ties into `panel.zig` and is built with it, not standalone).
+- **Command output**: each `Window` owns a `CommandBuffer` (already an
+  `ArrayList`); the context iterates windows in z-order to produce the final
+  command stream, instead of carving one shared byte buffer with begin/end
+  offsets.
+- **Config (style push/pop) stacks**: bounded arrays sized as upstream.
 
 **Phase 4 — Widgets**
 `widget.zig`, `text.zig`, `button.zig`, `toggle.zig`, `selectable.zig`,
