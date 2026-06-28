@@ -23,6 +23,7 @@ pub const text = @import("text.zig");
 pub const button = @import("button.zig");
 pub const toggle = @import("toggle.zig");
 pub const slider = @import("slider.zig");
+pub const progress = @import("progress.zig");
 pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -76,5 +77,6 @@ test {
     _ = button;
     _ = toggle;
     _ = slider;
+    _ = progress;
     _ = @import("handle.zig");
 }

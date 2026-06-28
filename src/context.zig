@@ -29,6 +29,7 @@ const widget_mod = @import("widget.zig");
 const button_widget = @import("button.zig");
 const toggle_widget = @import("toggle.zig");
 const slider_widget = @import("slider.zig");
+const progress_widget = @import("progress.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -849,6 +850,19 @@ pub const Context = struct {
         const old = value.*;
         value.* = try slider_widget.doSlider(&ctx.last_widget_state, &win.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputMut(w.state), ctx.style.font.?);
         return value.* != old;
+    }
+
+    // --- progress bar -----------------------------------------------------
+
+    /// A progress bar; when `modifiable`, dragging updates `cur`. Returns
+    /// whether the value changed (`nk_progress`).
+    pub fn progress(ctx: *Context, cur: *usize, max: usize, modifiable: bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const old = cur.*;
+        cur.* = try progress_widget.doProgress(&ctx.last_widget_state, &win.buffer, w.bounds, cur.*, max, modifiable, &ctx.style.progress, ctx.widgetInputMut(w.state));
+        return cur.* != old;
     }
 };
 
