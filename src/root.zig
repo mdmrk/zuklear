@@ -7,6 +7,7 @@
 const std = @import("std");
 
 pub const math = @import("math.zig");
+pub const color = @import("color.zig");
 pub const utf8 = @import("utf8.zig");
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -16,8 +17,12 @@ pub const Rect = math.Rect;
 pub const Recti = math.Recti;
 pub const Heading = math.Heading;
 
+pub const Color = color.Color;
+pub const Colorf = color.Colorf;
+
 test {
     // Pull in every module's tests.
     _ = math;
+    _ = color;
     _ = utf8;
 }
