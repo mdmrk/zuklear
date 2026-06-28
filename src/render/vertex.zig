@@ -11,6 +11,7 @@ const std = @import("std");
 const math = @import("../math.zig");
 const color = @import("../color.zig");
 const command = @import("../command.zig");
+const Handle = @import("../handle.zig").Handle;
 
 const Rect = math.Rect;
 const Color = color.Color;
@@ -25,16 +26,20 @@ pub const Vertex = extern struct {
 
 pub const Index = u32;
 
-/// A batch of triangles sharing one scissor clip (and the single texture).
+/// A batch of triangles sharing one scissor clip and one texture.
 pub const DrawCommand = struct {
     elem_count: u32,
     clip: Rect,
+    texture: Handle,
 };
 
 /// Options for `DrawList.convert`.
 pub const ConvertConfig = struct {
     /// UV of a fully-white texel in the bound texture (for solid fills).
     white_uv: [2]f32 = .{ 0, 0 },
+    /// Texture bound for solid/text geometry (e.g. the font atlas). Image
+    /// commands use their own `Image.handle` instead.
+    texture: Handle = .{ .id = 0 },
     /// Segments used to approximate a circle.
     circle_segments: u32 = 22,
     /// Emits glyph quads for a text command (e.g. `zuklear_font.drawListText`).
@@ -232,12 +237,25 @@ pub const DrawList = struct {
         }
     }
 
-    fn flush(dl: *DrawList, clip: Rect) !void {
+    fn flush(dl: *DrawList, clip: Rect, texture: Handle) !void {
         const total: u32 = @intCast(dl.indices.items.len);
         const count = total - dl.elem_offset;
         if (count == 0) return;
-        try dl.commands.append(dl.allocator, .{ .elem_count = count, .clip = clip });
+        try dl.commands.append(dl.allocator, .{ .elem_count = count, .clip = clip, .texture = texture });
         dl.elem_offset = total;
+    }
+
+    fn imageQuad(dl: *DrawList, c: command.ImageDraw) !void {
+        const img = c.img;
+        const tw: f32 = @floatFromInt(@max(img.w, 1));
+        const th: f32 = @floatFromInt(@max(img.h, 1));
+        const s0 = @as(f32, @floatFromInt(img.region[0])) / tw;
+        const t0 = @as(f32, @floatFromInt(img.region[1])) / th;
+        const s1 = @as(f32, @floatFromInt(img.region[0] + img.region[2])) / tw;
+        const t1 = @as(f32, @floatFromInt(img.region[1] + img.region[3])) / th;
+        const x: f32 = @floatFromInt(c.x);
+        const y: f32 = @floatFromInt(c.y);
+        try dl.quadUV(x, y, x + @as(f32, @floatFromInt(c.w)), y + @as(f32, @floatFromInt(c.h)), s0, t0, s1, t1, c.col);
     }
 
     /// Triangulate a command list into this draw list (`nk_convert`).
@@ -247,7 +265,7 @@ pub const DrawList = struct {
         for (commands) |cmd| {
             switch (cmd) {
                 .scissor => |s| {
-                    try dl.flush(clip);
+                    try dl.flush(clip, cfg.texture);
                     clip = Rect.initI(s.x, s.y, s.w, s.h);
                 },
                 .rect_filled => |c| try dl.solidRect(@floatFromInt(c.x), @floatFromInt(c.y), @floatFromInt(c.w), @floatFromInt(c.h), c.color),
@@ -279,6 +297,11 @@ pub const DrawList = struct {
                         try dl.line(@floatFromInt(c.points[i].x), @floatFromInt(c.points[i].y), @floatFromInt(c.points[i + 1].x), @floatFromInt(c.points[i + 1].y), @floatFromInt(c.line_thickness), c.color);
                 },
                 .text => |c| if (dl.cfg.text_hook) |h| try h(dl, c),
+                .image => |c| {
+                    try dl.flush(clip, cfg.texture); // close the pending solid/text batch
+                    try dl.imageQuad(c);
+                    try dl.flush(clip, c.img.handle); // the image gets its own batch + texture
+                },
                 .arc_filled => |c| try dl.arcFill(@floatFromInt(c.cx), @floatFromInt(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], c.color),
                 .arc => |c| try dl.arcStroke(@floatFromInt(c.cx), @floatFromInt(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], @floatFromInt(c.line_thickness), c.color),
                 .curve => |c| try dl.curve(
@@ -289,10 +312,10 @@ pub const DrawList = struct {
                     @floatFromInt(c.line_thickness),
                     c.color,
                 ),
-                .image, .custom => {}, // need an app-provided texture / callback
+                .custom => {}, // renderer-defined callback; the app dispatches it
             }
         }
-        try dl.flush(clip);
+        try dl.flush(clip, cfg.texture);
     }
 };
 
@@ -310,6 +333,25 @@ test "convert emits a quad per filled rect" {
     try std.testing.expectEqual(@as(usize, 1), dl.commands.items.len);
     try std.testing.expectEqual(@as(u32, 6), dl.commands.items[0].elem_count);
     try std.testing.expectEqual([4]u8{ 255, 0, 0, 255 }, dl.vertices.items[0].col);
+}
+
+test "image gets its own batch with its texture" {
+    var dl = DrawList.init(std.testing.allocator);
+    defer dl.deinit();
+    const image_mod = @import("../image.zig");
+    var img = image_mod.Image.fromId(7);
+    img.w = 64;
+    img.h = 64;
+    img.region = .{ 0, 0, 32, 32 };
+    var cmds = [_]Command{
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = Color.rgb(1, 2, 3) } },
+        .{ .image = .{ .x = 0, .y = 0, .w = 32, .h = 32, .img = img, .col = Color.white } },
+    };
+    try dl.convert(&cmds, .{ .texture = .{ .id = 1 } });
+    // two batches: the solid (texture 1) and the image (texture 7)
+    try std.testing.expectEqual(@as(usize, 2), dl.commands.items.len);
+    try std.testing.expectEqual(@as(i32, 1), dl.commands.items[0].texture.id);
+    try std.testing.expectEqual(@as(i32, 7), dl.commands.items[1].texture.id);
 }
 
 test "scissor splits into separate draw commands" {

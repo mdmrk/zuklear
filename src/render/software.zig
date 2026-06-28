@@ -59,6 +59,9 @@ pub const Rasterizer = struct {
     /// Optional text renderer (e.g. an `zuklear_font` atlas blitter). When null,
     /// text is drawn with the built-in bitmap font.
     text_fn: ?*const fn (*Rasterizer, command.Text) void = null,
+    /// Optional image blitter (the app supplies CPU pixels for `Image` handles).
+    /// When null, image commands are skipped.
+    image_fn: ?*const fn (*Rasterizer, command.ImageDraw) void = null,
 
     pub fn init(surface: *Surface) Rasterizer {
         return .{ .surface = surface, .cx1 = @intCast(surface.width), .cy1 = @intCast(surface.height) };
@@ -307,7 +310,8 @@ pub const Rasterizer = struct {
             .arc_filled => |c| r.fillArc(f(c.cx), f(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], c.color),
             .arc => |c| r.strokeArc(f(c.cx), f(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], @floatFromInt(c.line_thickness), c.color),
             .curve => |c| r.curve(c.begin, c.ctrl[0], c.ctrl[1], c.end, @floatFromInt(c.line_thickness), c.color),
-            .image, .custom => {}, // need an app-provided texture / callback
+            .image => |c| if (r.image_fn) |imf| imf(r, c),
+            .custom => {}, // renderer-defined callback; the app dispatches it
         }
     }
 

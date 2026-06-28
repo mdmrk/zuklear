@@ -112,7 +112,6 @@ pub const Renderer = struct {
         gl.Disable(DEPTH_TEST);
         gl.Enable(SCISSOR_TEST);
         gl.Enable(TEXTURE_2D);
-        gl.BindTexture(TEXTURE_2D, r.texture);
 
         gl.MatrixMode(PROJECTION);
         gl.LoadIdentity();
@@ -132,6 +131,9 @@ pub const Renderer = struct {
 
         var offset: usize = 0;
         for (dl.commands.items) |cmd| {
+            // a non-zero command texture is an app-supplied image; otherwise use
+            // the bound font atlas (which also holds the white texel for solids).
+            gl.BindTexture(TEXTURE_2D, if (cmd.texture.id != 0) @intCast(cmd.texture.id) else r.texture);
             const cx: i32 = @intFromFloat(cmd.clip.x);
             const cy: i32 = fb_h - @as(i32, @intFromFloat(cmd.clip.y + cmd.clip.h));
             const cw: i32 = @intFromFloat(@max(cmd.clip.w, 0));
