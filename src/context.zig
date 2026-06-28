@@ -36,6 +36,7 @@ const hash_mod = @import("hash.zig");
 const image_mod = @import("image.zig");
 const knob_widget = @import("knob.zig");
 const color_picker_widget = @import("color_picker.zig");
+const text_editor = @import("text_editor.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -97,6 +98,37 @@ pub const CollapseState = enum { minimized, maximized };
 
 /// Tree node visual style (`nk_tree_type`).
 pub const TreeType = enum { node, tab };
+
+/// Text-edit option flags (`enum nk_edit_flags`).
+pub const EditFlags = packed struct(u32) {
+    read_only: bool = false,
+    auto_select: bool = false,
+    sig_enter: bool = false,
+    allow_tab: bool = false,
+    no_cursor: bool = false,
+    selectable: bool = false,
+    clipboard: bool = false,
+    ctrl_enter_newline: bool = false,
+    no_horizontal_scroll: bool = false,
+    always_insert_mode: bool = false,
+    multiline: bool = false,
+    goto_end_on_activate: bool = false,
+    _pad: u20 = 0,
+
+    pub const simple: EditFlags = .{ .always_insert_mode = true };
+    pub const field: EditFlags = .{ .always_insert_mode = true, .selectable = true, .clipboard = true };
+    pub const box: EditFlags = .{ .always_insert_mode = true, .selectable = true, .multiline = true, .allow_tab = true, .clipboard = true };
+    pub const editor: EditFlags = .{ .selectable = true, .multiline = true, .allow_tab = true, .clipboard = true };
+};
+
+/// Result of an edit widget for the frame (`enum nk_edit_events`).
+pub const EditEvents = struct {
+    active: bool = false,
+    inactive: bool = false,
+    activated: bool = false,
+    deactivated: bool = false,
+    committed: bool = false,
+};
 
 /// Chart plot style (`nk_chart_type`).
 pub const ChartType = enum { lines, column };
@@ -1238,6 +1270,137 @@ pub const Context = struct {
         return color_picker_widget.doColorPicker(&ctx.last_widget_state, &win.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
+    // --- edit (text input) ------------------------------------------------
+
+    /// A text input field driven by a caller-owned `TextEdit`
+    /// (`nk_edit_buffer`). Returns the frame's edit events.
+    ///
+    /// NOTE: single-line editing is fully supported; horizontal scrolling for
+    /// over-long single-line text and multi-line layout are TODO (long text is
+    /// clipped to the field).
+    pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
+        const win = ctx.current.?;
+        const s = &ctx.style.edit;
+        const font = ctx.style.font.?;
+        const out = &win.buffer;
+        const left = @intFromEnum(input_mod.Button.left);
+
+        const w = ctx.widget();
+        if (w.state == .invalid) return .{ .inactive = true };
+        const bounds = w.bounds;
+        const in: ?*Input = if (w.state == .rom or w.state == .disabled or win.layout.?.flags.rom) null else &ctx.input;
+
+        const area = Rect{
+            .x = bounds.x + s.padding.x + s.border,
+            .y = bounds.y + s.padding.y + s.border,
+            .w = bounds.w - 2 * (s.padding.x + s.border),
+            .h = bounds.h - 2 * (s.padding.y + s.border),
+        };
+
+        editor.single_line = !flags.multiline;
+
+        // focus: clicking inside activates, clicking outside deactivates
+        const prev_active = editor.active;
+        if (in) |i| {
+            if (i.mouse.buttons[left].clicked != 0 and i.mouse.buttons[left].down) {
+                editor.active = bounds.contains(i.mouse.pos);
+            }
+        }
+        if (!prev_active and editor.active) {
+            if (flags.auto_select) editor.selectAll();
+            if (flags.goto_end_on_activate) editor.cursor = editor.string.glyphLen();
+        } else if (!editor.active) {
+            editor.mode = .view;
+        }
+        if (flags.read_only) {
+            editor.mode = .view;
+        } else if (flags.always_insert_mode) {
+            editor.mode = .insert;
+        }
+
+        var events = EditEvents{ .active = editor.active, .inactive = !editor.active };
+        if (prev_active != editor.active) {
+            if (editor.active) events.activated = true else events.deactivated = true;
+        }
+
+        // input
+        if (editor.active and in != null and editor.mode != .view) {
+            const i = in.?;
+            const shift = i.isKeyDown(.shift);
+            inline for (std.meta.fields(input_mod.Key)) |f| {
+                const k: input_mod.Key = @enumFromInt(f.value);
+                if (k != .enter and k != .tab and i.isKeyPressed(k)) editor.key(k, shift);
+            }
+            if (i.keyboard.text_len > 0) {
+                try editor.insert(i.text());
+                i.keyboard.text_len = 0;
+            }
+            if (i.isKeyPressed(.enter)) {
+                if (flags.sig_enter) {
+                    events.committed = true;
+                } else if (!editor.single_line) {
+                    try editor.insert("\n");
+                }
+            }
+        }
+
+        // widget interaction state for styling
+        var wstate: widget_mod.States = .{};
+        if (editor.active) {
+            wstate = widget_mod.States.active;
+        } else if (in != null and in.?.isMouseHoveringRect(bounds)) {
+            wstate = widget_mod.States.hovered;
+        }
+        ctx.last_widget_state = wstate;
+
+        // draw background + border
+        const bg = if (wstate.actived) s.active else if (wstate.hover) s.hover else s.normal;
+        const text_color = if (wstate.actived) s.text_active else if (wstate.hover) s.text_hover else s.text_normal;
+        var text_bg: Color = .{ .a = 0 };
+        switch (bg) {
+            .image => |img| try out.drawImage(bounds, img, Color.white),
+            .nine_slice => |sl| try out.drawNineSlice(bounds, sl, Color.white),
+            .color => |col| {
+                text_bg = col;
+                try out.fillRect(bounds, s.rounding, col);
+                try out.strokeRect(bounds, s.rounding, s.border, s.border_color);
+            },
+        }
+
+        // clip to the text area
+        const old_clip = out.clip;
+        try out.pushScissor(old_clip.unify(area.x, area.y, area.x + area.w, area.y + area.h));
+
+        const bytes = editor.string.bytes();
+
+        // selection highlight
+        if (editor.hasSelection()) {
+            var a = editor.select_start;
+            var b = editor.select_end;
+            if (b < a) {
+                const t = a;
+                a = b;
+                b = t;
+            }
+            const ax = font.textWidth(bytes[0..(editor.string.atRune(a).?.offset)]);
+            const bx = font.textWidth(bytes[0..(editor.string.atRune(b).?.offset)]);
+            try out.fillRect(Rect.init(area.x + ax, area.y, bx - ax, area.h), 0, s.selected_normal);
+        }
+
+        // text
+        try text_widget.widgetText(out, area, bytes, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
+
+        // cursor
+        if (editor.active and !flags.no_cursor and !editor.hasSelection()) {
+            const cx = font.textWidth(bytes[0..(editor.string.atRune(editor.cursor).?.offset)]);
+            const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
+            try out.fillRect(Rect.init(area.x + cx, area.y, s.cursor_size, area.h), 0, cursor_color);
+        }
+
+        try out.pushScissor(old_clip);
+        return events;
+    }
+
     // --- chart ------------------------------------------------------------
 
     /// Begin a chart with an explicit slot color (`nk_chart_begin_colored`).
@@ -1730,6 +1893,36 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "edit field activates on click and accepts typed text" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 32);
+    defer editor.deinit();
+
+    // frame 1: click inside the field to focus it
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
+    ctx.input.button(.left, 20, 20, true);
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(30, 1);
+    const e1 = try ctx.editBuffer(EditFlags.field, &editor);
+    ctx.end();
+    try std.testing.expect(e1.activated);
+    try std.testing.expect(editor.active);
+    ctx.clear();
+
+    // frame 2: type "hi"
+    ctx.input.begin();
+    ctx.input.char('h');
+    ctx.input.char('i');
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(30, 1);
+    _ = try ctx.editBuffer(EditFlags.field, &editor);
+    ctx.end();
+    try std.testing.expectEqualStrings("hi", editor.text());
+    ctx.clear();
 }
 
 test "line chart emits markers and lines" {
