@@ -7,7 +7,7 @@
 //! editing — the common text field — is fully supported.
 
 const std = @import("std");
-const utf8 = @import("utf8.zig");
+const unicode = std.unicode;
 const String = @import("String.zig");
 const Key = @import("input.zig").Key;
 
@@ -150,11 +150,9 @@ pub const TextEdit = struct {
 
     /// Insert/replace `input` (UTF-8) at the cursor (`nk_textedit_text`).
     pub fn insert(e: *TextEdit, input: []const u8) !void {
-        var off: usize = 0;
-        var d = utf8.decode(input);
-        while (off < input.len and d.len != 0) {
-            const rune = d.rune;
-            const glyph = input[off .. off + d.len];
+        var it = unicode.Utf8Iterator{ .bytes = input, .i = 0 };
+        while (it.nextCodepointSlice()) |glyph| {
+            const rune = unicode.utf8Decode(glyph) catch 0xFFFD;
             const allowed = rune != 127 and
                 !(rune == '\n' and e.single_line) and
                 (e.filter == null or e.filter.?(rune));
@@ -170,8 +168,6 @@ pub const TextEdit = struct {
                 }
                 e.has_preferred_x = false;
             }
-            off += d.len;
-            d = utf8.decode(input[off..]);
         }
     }
 
@@ -284,7 +280,7 @@ pub const TextEdit = struct {
         e.clamp();
         e.deleteSelection();
         try e.string.insertAtRune(e.cursor, paste_text);
-        e.cursor += utf8.count(paste_text);
+        e.cursor += unicode.utf8CountCodepoints(paste_text) catch 0;
         e.has_preferred_x = false;
     }
 

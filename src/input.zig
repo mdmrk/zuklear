@@ -7,7 +7,6 @@
 
 const std = @import("std");
 const math = @import("math.zig");
-const utf8 = @import("utf8.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -157,9 +156,9 @@ pub const Input = struct {
 
     /// Buffer one Unicode codepoint of text input (`nk_input_unicode`).
     pub fn unicode(in: *Input, rune: u21) void {
-        var tmp: [utf8.max_size]u8 = undefined;
-        const n = utf8.encode(rune, &tmp);
-        if (n == 0 or in.keyboard.text_len + n >= input_max) return;
+        var tmp: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(rune, &tmp) catch return;
+        if (in.keyboard.text_len + n >= input_max) return;
         @memcpy(in.keyboard.text[in.keyboard.text_len..][0..n], tmp[0..n]);
         in.keyboard.text_len += n;
     }
@@ -171,8 +170,11 @@ pub const Input = struct {
 
     /// Buffer the first glyph of a UTF-8 byte sequence (`nk_input_glyph`).
     pub fn glyph(in: *Input, bytes: []const u8) void {
-        const d = utf8.decode(bytes);
-        if (d.len != 0) in.unicode(d.rune);
+        if (bytes.len == 0) return;
+        const n = std.unicode.utf8ByteSequenceLength(bytes[0]) catch return;
+        if (bytes.len < n) return;
+        const rune = std.unicode.utf8Decode(bytes[0..n]) catch return;
+        in.unicode(rune);
     }
 
     /// The text buffered this frame.

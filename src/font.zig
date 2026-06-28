@@ -7,7 +7,7 @@
 //! stb-based atlas builder) is a separate later phase.
 
 const std = @import("std");
-const utf8 = @import("utf8.zig");
+const unicode = std.unicode;
 const Handle = @import("handle.zig").Handle;
 
 /// Measures the pixel width of a UTF-8 string at a given font height
@@ -49,14 +49,16 @@ pub fn textClamp(font: *const UserFont, text: []const u8, space: f32, sep_list: 
     var sep_g: usize = 0;
     var sep_len: usize = 0;
 
-    var d = utf8.decode(text);
-    while (d.len != 0 and width < space and len < text.len) {
-        len += d.len;
+    var it = unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+    while (width < space and len < text.len) {
+        const slice = it.nextCodepointSlice() orelse break;
+        const rune = unicode.utf8Decode(slice) catch 0xFFFD;
+        len += slice.len;
         const s = font.textWidth(text[0..len]);
 
         var matched = false;
         for (sep_list) |sep| {
-            if (d.rune == sep) {
+            if (rune == sep) {
                 sep_width = width;
                 last_width = width;
                 sep_g = g + 1;
@@ -72,7 +74,6 @@ pub fn textClamp(font: *const UserFont, text: []const u8, space: f32, sep_list: 
         }
 
         width = s;
-        d = utf8.decode(text[len..]);
         g += 1;
     }
 
@@ -86,7 +87,7 @@ pub fn textClamp(font: *const UserFont, text: []const u8, space: f32, sep_list: 
 
 /// Fixed-width test font: every glyph is 10px wide.
 fn mockWidth(_: Handle, _: f32, text: []const u8) f32 {
-    return @as(f32, @floatFromInt(utf8.count(text))) * 10.0;
+    return @as(f32, @floatFromInt(unicode.utf8CountCodepoints(text) catch 0)) * 10.0;
 }
 const mock_font = UserFont{ .height = 12, .width = &mockWidth };
 

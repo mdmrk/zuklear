@@ -8,7 +8,6 @@ const std = @import("std");
 
 pub const math = @import("math.zig");
 pub const color = @import("color.zig");
-pub const utf8 = @import("utf8.zig");
 pub const Buffer = @import("Buffer.zig");
 pub const String = @import("String.zig");
 pub const command = @import("command.zig");
@@ -72,7 +71,6 @@ test {
     // Pull in every module's tests.
     _ = math;
     _ = color;
-    _ = utf8;
     _ = Buffer;
     _ = String;
     _ = command;

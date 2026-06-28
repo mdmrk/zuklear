@@ -8,8 +8,14 @@
 //! rune-indexed insertion/deletion.
 
 const std = @import("std");
-const utf8 = @import("utf8.zig");
+const unicode = std.unicode;
 const Buffer = @import("Buffer.zig");
+
+/// Tolerant glyph count (treats the content as valid UTF-8, which String always
+/// produces).
+fn countGlyphs(text: []const u8) usize {
+    return unicode.utf8CountCodepoints(text) catch 0;
+}
 
 const String = @This();
 
@@ -58,14 +64,13 @@ pub fn glyphLen(s: *const String) usize {
 pub fn appendBytes(s: *String, str: []const u8) !void {
     if (str.len == 0) return;
     try s.buffer.push(.front, str, 0);
-    s.glyphs += utf8.count(str);
+    s.glyphs += countGlyphs(str);
 }
 
 /// Append a single rune (`nk_str_append_text_runes` for one rune).
 pub fn appendRune(s: *String, rune: u21) !void {
-    var glyph: [utf8.max_size]u8 = undefined;
-    const n = utf8.encode(rune, &glyph);
-    if (n == 0) return;
+    var glyph: [4]u8 = undefined;
+    const n = unicode.utf8Encode(rune, &glyph) catch return;
     try s.appendBytes(glyph[0..n]);
 }
 
@@ -85,7 +90,7 @@ pub fn insertAt(s: *String, pos: usize, str: []const u8) !void {
     const mem = s.buffer.memory;
     std.mem.copyBackwards(u8, mem[pos + str.len ..][0..copylen], mem[pos..][0..copylen]);
     @memcpy(mem[pos..][0..str.len], str);
-    s.glyphs = utf8.count(s.bytes());
+    s.glyphs = countGlyphs(s.bytes());
 }
 
 /// Insert bytes before the glyph at rune position `pos`
@@ -101,7 +106,7 @@ pub fn insertAtRune(s: *String, pos: usize, str: []const u8) !void {
 pub fn removeChars(s: *String, len: usize) void {
     if (len > s.buffer.allocated) return;
     s.buffer.allocated -= len;
-    s.glyphs = utf8.count(s.bytes());
+    s.glyphs = countGlyphs(s.bytes());
 }
 
 /// Truncate `n` runes from the end (`nk_str_remove_runes`).
@@ -127,7 +132,7 @@ pub fn deleteChars(s: *String, pos: usize, len: usize) void {
     } else {
         s.removeChars(len);
     }
-    s.glyphs = utf8.count(s.bytes());
+    s.glyphs = countGlyphs(s.bytes());
 }
 
 /// Delete `len` runes starting at rune position `pos` (`nk_str_delete_runes`).
@@ -143,18 +148,16 @@ pub fn deleteRunes(s: *String, pos: usize, len_in: usize) void {
 /// Locate the glyph at rune position `pos` (`nk_str_at_rune`). Returns an
 /// end-of-string locator when `pos == glyphLen()`, or null when out of range.
 pub fn atRune(s: *const String, pos: usize) ?Located {
-    const text = s.bytes();
+    var it = unicode.Utf8Iterator{ .bytes = s.bytes(), .i = 0 };
     var i: usize = 0;
-    var src: usize = 0;
-    var d = utf8.decode(text);
-    while (d.len != 0) {
-        if (i == pos) return .{ .offset = src, .rune = d.rune, .len = d.len };
-        i += 1;
-        src += d.len;
-        d = utf8.decode(text[src..]);
+    while (true) : (i += 1) {
+        const src = it.i;
+        const slice = it.nextCodepointSlice() orelse {
+            if (i == pos) return .{ .offset = src, .rune = 0, .len = 0 };
+            return null;
+        };
+        if (i == pos) return .{ .offset = src, .rune = unicode.utf8Decode(slice) catch 0xFFFD, .len = slice.len };
     }
-    if (i == pos) return .{ .offset = src, .rune = 0, .len = 0 };
-    return null;
 }
 
 /// The rune at glyph position `pos`, or 0 if out of range (`nk_str_rune_at`).

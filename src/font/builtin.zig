@@ -6,7 +6,6 @@
 //! Pair it with the software rasterizer: `Context.init(gpa, &builtin.font(16))`.
 
 const std = @import("std");
-const utf8 = @import("../utf8.zig");
 const Handle = @import("../handle.zig").Handle;
 const UserFont = @import("../font.zig").UserFont;
 
@@ -21,7 +20,7 @@ pub fn scaleFor(height: f32) i32 {
 
 fn widthFn(_: Handle, height: f32, text: []const u8) f32 {
     const scale: f32 = @floatFromInt(scaleFor(height));
-    return @as(f32, @floatFromInt(utf8.count(text))) * 8.0 * scale;
+    return @as(f32, @floatFromInt(std.unicode.utf8CountCodepoints(text) catch 0)) * 8.0 * scale;
 }
 
 /// A `UserFont` backed by this bitmap font at the given pixel `height`
