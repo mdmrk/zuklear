@@ -18,6 +18,7 @@ pub const image = @import("image.zig");
 pub const style = @import("style.zig");
 pub const hash = @import("hash.zig");
 pub const context = @import("context.zig");
+pub const text = @import("text.zig");
 pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -66,5 +67,6 @@ test {
     _ = style;
     _ = hash;
     _ = context;
+    _ = text;
     _ = @import("handle.zig");
 }

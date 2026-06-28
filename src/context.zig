@@ -24,6 +24,7 @@ const style_mod = @import("style.zig");
 const command = @import("command.zig");
 const input_mod = @import("input.zig");
 const font_mod = @import("font.zig");
+const text_widget = @import("text.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -496,13 +497,13 @@ pub const Context = struct {
             }
 
             // title label
-            var label = Rect{};
+            var title_label = Rect{};
             const t = font.textWidth(title);
-            label.x = header.x + s.window.header.padding.x + s.window.header.label_padding.x;
-            label.y = header.y + s.window.header.label_padding.y;
-            label.h = font.height + 2 * s.window.header.label_padding.y;
-            label.w = std.math.clamp(t + 2 * s.window.header.spacing.x, 0, header.x + header.w - label.x);
-            out.drawText(label, title, font, text_bg, text_color) catch {};
+            title_label.x = header.x + s.window.header.padding.x + s.window.header.label_padding.x;
+            title_label.y = header.y + s.window.header.label_padding.y;
+            title_label.h = font.height + 2 * s.window.header.label_padding.y;
+            title_label.w = std.math.clamp(t + 2 * s.window.header.spacing.x, 0, header.x + header.w - title_label.x);
+            out.drawText(title_label, title, font, text_bg, text_color) catch {};
         }
 
         // window background
@@ -746,6 +747,31 @@ pub const Context = struct {
         if (!v.contains(in.mouse.pos)) return .{ .state = .rom, .bounds = bounds };
         return .{ .state = .valid, .bounds = bounds };
     }
+
+    // --- text widgets -----------------------------------------------------
+
+    /// Draw a text label in color `col` in the next layout slot
+    /// (`nk_text_colored`).
+    pub fn textColored(ctx: *Context, str: []const u8, alignment: Align, col: Color) !void {
+        const win = ctx.current.?;
+        const s = &ctx.style;
+        const bounds = ctx.panelAllocSpace();
+        try text_widget.widgetText(
+            &win.buffer,
+            bounds,
+            str,
+            alignment,
+            s.text.padding,
+            s.window.background,
+            col.factor(s.text.color_factor),
+            s.font.?,
+        );
+    }
+
+    /// Draw a text label in the default text color (`nk_text` / `nk_label`).
+    pub fn label(ctx: *Context, str: []const u8, alignment: Align) !void {
+        try ctx.textColored(str, alignment, ctx.style.text.color);
+    }
 };
 
 // --- tests ---------------------------------------------------------------
@@ -799,6 +825,22 @@ test "window is reused across frames and GC'd when dropped" {
     ctx.clear();
     try std.testing.expectEqual(@as(usize, 1), ctx.windows.items.len);
     try std.testing.expect(ctx.lookup.get("b") == null);
+}
+
+test "label emits a text command in the current row" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    _ = try ctx.begin("win", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(20, 1);
+    try ctx.label("hello", .{ .left = true, .middle = true });
+    ctx.end();
+    const cmds = ctx.windowCommands("win").?;
+    var found = false;
+    for (cmds) |c| if (c == .text) {
+        try std.testing.expectEqualStrings("hello", c.text.string);
+        found = true;
+    };
+    try std.testing.expect(found);
 }
 
 test "hidden window reports not visible" {
