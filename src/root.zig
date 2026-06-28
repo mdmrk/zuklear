@@ -66,32 +66,19 @@ pub const Window = context.Window;
 pub const Panel = context.Panel;
 pub const WindowFlags = context.WindowFlags;
 pub const WidgetLayoutState = context.WidgetLayoutState;
+pub const ButtonBehavior = context.ButtonBehavior;
+pub const CollapseState = context.CollapseState;
+pub const TreeType = context.TreeType;
+pub const EditFlags = context.EditFlags;
+pub const EditEvents = context.EditEvents;
+pub const ChartType = context.ChartType;
+pub const ColorFormat = color_picker.ColorFormat;
+pub const TextEdit = text_editor.TextEdit;
 
 test {
-    // Pull in every module's tests.
-    _ = math;
-    _ = color;
-    _ = Buffer;
-    _ = String;
-    _ = command;
-    _ = input;
-    _ = font;
-    _ = image;
-    _ = style;
-    _ = context;
-    _ = widget;
-    _ = text;
-    _ = symbol;
-    _ = button;
-    _ = toggle;
-    _ = slider;
-    _ = progress;
-    _ = scrollbar;
-    _ = selectable;
-    _ = knob;
-    _ = color_picker;
-    _ = text_editor;
-    _ = builtin_font;
+    // Reference every public declaration so each module's `test` blocks are
+    // compiled and run. (`render` is a nested namespace, so reach into it.)
+    std.testing.refAllDecls(@This());
     _ = render.software;
     _ = render.vertex;
     _ = @import("handle.zig");
