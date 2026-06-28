@@ -277,9 +277,11 @@ pub const Panel = struct {
     chart: Chart = .{},
     buffer: *CommandBuffer = undefined,
     parent: ?*Panel = null,
-    /// Panel-local scroll storage that `offset_x`/`offset_y` point at for groups
-    /// (cross-frame group scroll persistence is a TODO with sub-scrollbars).
+    /// Panel-local scroll storage that `offset_x`/`offset_y` point at for groups.
     scroll: Scroll = .{},
+    /// For a group panel: the parent-window `WidgetState` key its scroll offset
+    /// is loaded from / stored to across frames (0 = none).
+    scroll_key: u32 = 0,
 };
 
 /// Non-blocking popup state held on the parent window (`nk_popup_state`).
@@ -692,11 +694,13 @@ pub const Context = struct {
         if (!layout.type.isSub()) out.pushScissor(math.null_rect) catch {};
         layout.at_y += layout.row.height;
 
-        // scrollbars (window path; sub-window scrolling and the resize scaler
-        // remain TODO until groups/scalable windows land)
-        if (!layout.flags.no_scrollbar and !layout.flags.minimized and !layout.type.isSub()) {
+        // scrollbars (top-level windows, groups and scrollable popups)
+        if (!layout.flags.no_scrollbar and !layout.flags.minimized) {
             const in_sb: ?*Input = if (layout.flags.rom or layout.flags.no_input) null else &ctx.input;
-            const has_scrolling = ctx.active == win and layout.has_scrolling;
+            const has_scrolling = if (layout.type.isSub())
+                (layout.has_scrolling and in_sb != null and ctx.input.isMouseHoveringRect(layout.bounds))
+            else
+                (ctx.active == win and layout.has_scrolling);
 
             // vertical
             const vscroll = Rect{
@@ -1759,10 +1763,9 @@ pub const Context = struct {
 
     // --- group (sub-window) -----------------------------------------------
 
-    /// Begin a scrollable sub-region in the current row. Returns true when
-    /// visible — only then emit contents and call `groupEnd` (`nk_group_begin`).
-    /// NOTE: group scrollbars and cross-frame scroll persistence are TODO; the
-    /// sub-panel lays out and clips correctly.
+    /// Begin a scrollable sub-region in the current row, identified by `title`.
+    /// Returns true when visible — only then emit contents and call `groupEnd`
+    /// (`nk_group_begin`). Scroll position persists across frames.
     pub fn groupBegin(ctx: *Context, title: []const u8, flags: WindowFlags) !bool {
         const win = ctx.current.?;
         const bounds = ctx.panelAllocSpace();
@@ -1773,6 +1776,11 @@ pub const Context = struct {
 
         const sub = try ctx.allocator.create(Panel);
         sub.* = .{ .buffer = &win.buffer };
+        // load the persisted scroll offset from the parent window's state
+        const key = std.hash.Murmur3_32.hashWithSeed(title, @intFromEnum(PanelType.group));
+        sub.scroll_key = key;
+        sub.scroll.x = win.state.find(key, ctx.seq) orelse 0;
+        sub.scroll.y = win.state.find(key +% 1, ctx.seq) orelse 0;
         sub.offset_x = &sub.scroll.x;
         sub.offset_y = &sub.scroll.y;
 
@@ -1830,6 +1838,12 @@ pub const Context = struct {
 
         ctx.current = win;
         win.layout = parent;
+
+        // persist the group's scroll offset on the parent window
+        if (g.scroll_key != 0) {
+            win.state.set(ctx.allocator, g.scroll_key, g.scroll.x, ctx.seq) catch {};
+            win.state.set(ctx.allocator, g.scroll_key +% 1, g.scroll.y, ctx.seq) catch {};
+        }
         ctx.allocator.destroy(g);
     }
 
@@ -2199,6 +2213,40 @@ test "tree node persists collapse state and toggles on click" {
     if (open3) ctx.treePop();
     ctx.end();
     try std.testing.expect(open3);
+}
+
+test "group scroll offset persists across frames" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    const drawGroup = struct {
+        fn run(c: *Context) !void {
+            _ = try c.begin("w", Rect.init(0, 0, 300, 300), .{});
+            c.layoutRowDynamic(120, 1);
+            if (try c.groupBegin("g", .{ .border = true })) {
+                c.layoutRowDynamic(20, 1);
+                for (0..30) |_| try c.label("row", .{ .left = true });
+                c.groupEnd();
+            }
+            c.end();
+        }
+    }.run;
+
+    // frame 1: hover the group and wheel down to scroll it
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 40, .y = 80 };
+    ctx.input.scroll(.{ .x = 0, .y = -3 });
+    try drawGroup(&ctx);
+    const win = ctx.lookup.get("w").?;
+    const key = std.hash.Murmur3_32.hashWithSeed("g", @intFromEnum(PanelType.group));
+    const scrolled = win.state.find(key +% 1, ctx.seq).?;
+    try std.testing.expect(scrolled > 0); // scrolled down
+    ctx.clear();
+
+    // frame 2: no input — the stored offset is still there
+    ctx.input.begin();
+    try drawGroup(&ctx);
+    try std.testing.expectEqual(scrolled, ctx.lookup.get("w").?.state.find(key +% 1, ctx.seq).?);
 }
 
 test "group lays out a nested sub-panel" {
