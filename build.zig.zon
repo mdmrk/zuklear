@@ -32,9 +32,13 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        // wio is used only by the demo example (`zig build example`), not by
+        // wio is used only by the demo examples (`zig build example`), not by
         // the zuklear library itself.
-        .wio = .{ .path = "../wio" },
+        .wio = .{
+            .url = "git+https://github.com/ypsvlq/wio.git#1be2e0e4e4a11a0fd28c125a3dd4024ae4aeaac6",
+            .hash = "wio-0.0.0-8xHrr0vPBwD8MXdMTMVZk_2NF5oRIUIXyfJhG7gPZzYv",
+            .lazy = true,
+        },
         // See `zig fetch --save <url>` for a command-line interface for adding dependencies.
         //.example = .{
         //    // When updating this field to a new URL, be sure to delete the corresponding
