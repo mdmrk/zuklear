@@ -128,6 +128,12 @@ pub const Rect = struct {
         return p.x >= r.x and p.x < r.x + r.w and
             p.y >= r.y and p.y < r.y + r.h;
     }
+
+    /// True if the two rectangles overlap (`NK_INTERSECT`).
+    pub fn intersects(a: Rect, b: Rect) bool {
+        return b.x < a.x + a.w and a.x < b.x + b.w and
+            b.y < a.y + a.h and a.y < b.y + b.h;
+    }
 };
 
 /// Integer rectangle (`nk_recti`).

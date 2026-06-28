@@ -11,6 +11,7 @@ pub const color = @import("color.zig");
 pub const utf8 = @import("utf8.zig");
 pub const Buffer = @import("Buffer.zig");
 pub const String = @import("String.zig");
+pub const command = @import("command.zig");
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
 pub const Vec2 = math.Vec2;
@@ -22,6 +23,9 @@ pub const Heading = math.Heading;
 pub const Color = color.Color;
 pub const Colorf = color.Colorf;
 
+pub const Command = command.Command;
+pub const CommandBuffer = command.CommandBuffer;
+
 test {
     // Pull in every module's tests.
     _ = math;
@@ -29,4 +33,5 @@ test {
     _ = utf8;
     _ = Buffer;
     _ = String;
+    _ = command;
 }
