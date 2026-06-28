@@ -30,6 +30,7 @@ const button_widget = @import("button.zig");
 const toggle_widget = @import("toggle.zig");
 const slider_widget = @import("slider.zig");
 const progress_widget = @import("progress.zig");
+const scrollbar_widget = @import("scrollbar.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -501,6 +502,44 @@ pub const Context = struct {
                 },
             }
 
+            // close / minimize buttons
+            const hdr_in: ?*const Input = if (win.flags.no_input) null else &ctx.input;
+            var btn = Rect{
+                .y = header.y + s.window.header.padding.y,
+                .h = header.h - 2 * s.window.header.padding.y,
+            };
+            btn.w = btn.h;
+            if (win.flags.closable) {
+                if (s.window.header.@"align" == .right) {
+                    btn.x = header.w + header.x - (btn.w + s.window.header.padding.x);
+                    header.w -= btn.w + s.window.header.spacing.x + s.window.header.padding.x;
+                } else {
+                    btn.x = header.x + s.window.header.padding.x;
+                    header.x += btn.w + s.window.header.spacing.x + s.window.header.padding.x;
+                }
+                const hit = button_widget.doButtonSymbol(&ctx.last_widget_state, out, btn, s.window.header.close_symbol, .default, &s.window.header.close_button, hdr_in, font) catch false;
+                if (hit and !win.flags.rom) {
+                    layout.flags.hidden = true;
+                    layout.flags.minimized = false;
+                }
+            }
+            if (win.flags.minimizable) {
+                if (s.window.header.@"align" == .right) {
+                    btn.x = header.w + header.x - btn.w;
+                    if (!win.flags.closable) {
+                        btn.x -= s.window.header.padding.x;
+                        header.w -= s.window.header.padding.x;
+                    }
+                    header.w -= btn.w + s.window.header.spacing.x;
+                } else {
+                    btn.x = header.x;
+                    header.x += btn.w + s.window.header.spacing.x + s.window.header.padding.x;
+                }
+                const sym = if (layout.flags.minimized) s.window.header.maximize_symbol else s.window.header.minimize_symbol;
+                const hit = button_widget.doButtonSymbol(&ctx.last_widget_state, out, btn, sym, .default, &s.window.header.minimize_button, hdr_in, font) catch false;
+                if (hit and !win.flags.rom) layout.flags.minimized = !layout.flags.minimized;
+            }
+
             // title label
             var title_label = Rect{};
             const t = font.textWidth(title);
@@ -541,11 +580,44 @@ pub const Context = struct {
         const s = &ctx.style;
         const out = &win.buffer;
 
+        const font = s.font.?;
+        const scrollbar_size = s.window.scrollbar_size;
+        const panel_padding = panelGetPadding(s, layout.type);
+
         if (!layout.type.isSub()) out.pushScissor(math.null_rect) catch {};
         layout.at_y += layout.row.height;
 
-        // NOTE: scrollbars, the resize scaler and scroll-auto-hide are deferred
-        // to the widget phase (they require the scrollbar/button widgets).
+        // scrollbars (window path; sub-window scrolling and the resize scaler
+        // remain TODO until groups/scalable windows land)
+        if (!layout.flags.no_scrollbar and !layout.flags.minimized and !layout.type.isSub()) {
+            const in_sb: ?*Input = if (layout.flags.rom or layout.flags.no_input) null else &ctx.input;
+            const has_scrolling = ctx.active == win and layout.has_scrolling;
+
+            // vertical
+            const vscroll = Rect{
+                .x = layout.bounds.x + layout.bounds.w + panel_padding.x,
+                .y = layout.bounds.y,
+                .w = scrollbar_size.x,
+                .h = layout.bounds.h,
+            };
+            const voff: f32 = @floatFromInt(layout.offset_y.*);
+            const vtarget = @trunc(layout.at_y - vscroll.y);
+            const vnew = scrollbar_widget.doScrollbarV(&ctx.last_widget_state, out, vscroll, has_scrolling, voff, vtarget, vscroll.h * 0.10, vscroll.h * 0.01, &s.scrollv, in_sb, font) catch voff;
+            layout.offset_y.* = @intFromFloat(@max(0, vnew));
+            if (in_sb != null and has_scrolling) ctx.input.mouse.scroll_delta.y = 0;
+
+            // horizontal
+            const hscroll = Rect{
+                .x = layout.bounds.x,
+                .y = layout.bounds.y + layout.bounds.h,
+                .w = layout.bounds.w,
+                .h = scrollbar_size.y,
+            };
+            const hoff: f32 = @floatFromInt(layout.offset_x.*);
+            const htarget = @trunc(layout.max_x - hscroll.x);
+            const hnew = scrollbar_widget.doScrollbarH(&ctx.last_widget_state, out, hscroll, has_scrolling, hoff, htarget, layout.max_x * 0.05, layout.max_x * 0.005, &s.scrollh, in_sb, font) catch hoff;
+            layout.offset_x.* = @intFromFloat(@max(0, hnew));
+        }
 
         if (layout.flags.border) {
             const border_color = panelGetBorderColor(s, layout.type);
@@ -559,6 +631,16 @@ pub const Context = struct {
             b.h = padding_y - win.bounds.y;
             out.strokeRect(b, s.window.rounding, layout.border, border_color) catch {};
         }
+
+        // a hidden window clears its command buffer for the frame
+        if (!layout.type.isSub() and layout.flags.hidden) win.buffer.reset();
+
+        if (layout.flags.remove_rom) {
+            layout.flags.rom = false;
+            layout.flags.remove_rom = false;
+        }
+        // propagate panel flag changes (close/minimize) back to the window
+        win.flags = layout.flags;
     }
 
     // --- layout engine ----------------------------------------------------
@@ -949,6 +1031,28 @@ test "button click is detected through the context" {
     const clicked = try ctx.buttonLabel("press");
     ctx.end();
     try std.testing.expect(clicked);
+}
+
+test "clicking the close button hides the window next frame" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    // frame 1: locate where the right-aligned close button sits and click it.
+    // header height = 13 + 2*4 + 2*4 = 29; close button is ~ at the top-right.
+    const bounds = Rect.init(0, 0, 200, 200);
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 190, .y = 12 };
+    ctx.input.button(.left, 190, 12, true); // press (default buttons trigger on press)
+    _ = try ctx.begin("win", bounds, .{ .title = true, .closable = true });
+    ctx.end();
+    try std.testing.expect(ctx.lookup.get("win").?.flags.hidden);
+    ctx.clear();
+
+    // frame 2: window now reports not visible
+    ctx.input.begin();
+    const visible = try ctx.begin("win", bounds, .{ .title = true, .closable = true });
+    ctx.end();
+    try std.testing.expect(!visible);
 }
 
 test "hidden window reports not visible" {
