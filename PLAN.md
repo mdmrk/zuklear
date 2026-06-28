@@ -56,11 +56,18 @@ Third-party credits tracked in `THIRD-PARTY-NOTICES.md` as deps are integrated.
 Real `build.zig` (library module + tests + examples step), `root.zig` aggregator,
 `LICENSE` (dual), `README.md`, `THIRD-PARTY-NOTICES.md`, this plan.
 
-**Phase 1 — Foundations (headless, pure)**
-`math.zig` (Vec2/Rect + sqrt/sin/cos/atan approximations, rounding) →
-`color.zig` (Color/Colorf, hex/hsv) → `utf8.zig` (decode/encode) →
-`string.zig` (dynamic string) → `memory.zig` (buffer/pool) → `util.zig` (as needed).
-Each with `test` blocks; cross-check numeric output vs upstream where useful.
+**Phase 1 — Foundations (headless, pure)** ✅ done
+`math.zig` ✅ (uses std.math, not Nuklear's bundled approximations) →
+`color.zig` ✅ (Color/Colorf, hex/hsv) → `utf8.zig` ✅ (decode/encode) →
+`String.zig` ✅ (dynamic UTF-8 string) → `Buffer.zig` ✅ (double-ended buffer).
+Each with `test` blocks.
+
+Sequencing refinements made during the port:
+- `pool`/`page_element` moved to **Phase 3**: they allocate the
+  `nk_page_element` union (window/panel/table), so they need the context types.
+- `util.zig` is ported **on demand**, not wholesale: most of `nuklear_util.c`
+  (memcpy/memset/strlen/dtoa/ftoa/strtof…) is covered by Zig's `std`. Only
+  helpers without a std equivalent get ported, when a consumer needs them.
 
 **Phase 2 — Command buffer, draw, input**
 `command.zig` (`Command` union + `CommandBuffer`), `draw.zig` (stroke/fill
