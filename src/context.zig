@@ -32,6 +32,8 @@ const slider_widget = @import("slider.zig");
 const progress_widget = @import("progress.zig");
 const scrollbar_widget = @import("scrollbar.zig");
 const selectable_widget = @import("selectable.zig");
+const hash_mod = @import("hash.zig");
+const image_mod = @import("image.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -87,6 +89,12 @@ pub const RowLayoutType = enum {
 };
 
 pub const LayoutFormat = enum { dynamic, static };
+
+/// Collapsed/expanded state of a tree node (`nk_collapse_states`).
+pub const CollapseState = enum { minimized, maximized };
+
+/// Tree node visual style (`nk_tree_type`).
+pub const TreeType = enum { node, tab };
 
 pub const WidgetLayoutState = widget_mod.LayoutState;
 
@@ -406,6 +414,10 @@ pub const Context = struct {
         const layout = ctx.current.?.layout.?;
         const s = &ctx.style;
         layout.row.min_height = s.font.?.height + s.text.padding.y * 2 + s.window.min_row_height_padding * 2;
+    }
+
+    fn layoutSetMinRowHeight(ctx: *Context, height: f32) void {
+        ctx.current.?.layout.?.row.min_height = height;
     }
 
     fn panelBegin(ctx: *Context, title: []const u8, panel_type: PanelType) bool {
@@ -958,6 +970,98 @@ pub const Context = struct {
         if (w.state == .invalid) return false;
         return selectable_widget.doSelectable(&ctx.last_widget_state, &win.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
     }
+
+    // --- tree -------------------------------------------------------------
+
+    fn treeStateBase(ctx: *Context, ttype: TreeType, img: ?image_mod.Image, title: []const u8, state: *bool) !bool {
+        const win = ctx.current.?;
+        const layout = win.layout.?;
+        const s = &ctx.style;
+        const out = &win.buffer;
+        const font = s.font.?;
+        const item_spacing = s.window.spacing;
+
+        const row_height = font.height + 2 * s.tab.padding.y;
+        ctx.layoutSetMinRowHeight(row_height);
+        ctx.layoutRowDynamic(row_height, 1);
+        ctx.resetMinRowHeight();
+
+        const wr = ctx.widget();
+        var header = wr.bounds;
+        const text_bg = s.window.background;
+
+        if (ttype == .tab) {
+            switch (s.tab.background) {
+                .image => |im| try out.drawImage(header, im, Color.white.factor(s.tab.color_factor)),
+                .nine_slice => |sl| try out.drawNineSlice(header, sl, Color.white.factor(s.tab.color_factor)),
+                .color => |col| {
+                    try out.fillRect(header, 0, s.tab.border_color.factor(s.tab.color_factor));
+                    try out.fillRect(header.shrink(s.tab.border), s.tab.rounding, col.factor(s.tab.color_factor));
+                },
+            }
+        }
+
+        // toggle on header click
+        const in: ?*const Input = if (!layout.flags.rom and wr.state == .valid) &ctx.input else null;
+        var ws: widget_mod.States = .{};
+        if (button_widget.behavior(&ws, header, in, .default)) state.* = !state.*;
+
+        const sym_type = if (state.*) s.tab.sym_maximize else s.tab.sym_minimize;
+        const btn_style = if (state.*)
+            (if (ttype == .tab) &s.tab.tab_maximize_button else &s.tab.node_maximize_button)
+        else
+            (if (ttype == .tab) &s.tab.tab_minimize_button else &s.tab.node_minimize_button);
+
+        var sym = Rect{ .w = font.height, .h = font.height, .y = header.y + s.tab.padding.y, .x = header.x + s.tab.padding.x };
+        _ = try button_widget.doButtonSymbol(&ws, out, sym, sym_type, .default, btn_style, null, font);
+
+        if (img) |im| {
+            sym.x = sym.x + sym.w + 4 * item_spacing.x;
+            try out.drawImage(sym, im, Color.white);
+            sym.w = font.height + s.tab.spacing.x;
+        }
+
+        // label
+        header.w = @max(header.w, sym.w + item_spacing.x);
+        const label_rect = Rect{
+            .x = sym.x + sym.w + item_spacing.x,
+            .y = sym.y,
+            .w = header.w - (sym.w + item_spacing.y + s.tab.indent),
+            .h = font.height,
+        };
+        try text_widget.widgetText(out, label_rect, title, Align.text_left, math.Vec2.init(0, 0), text_bg, s.tab.text.factor(s.tab.color_factor), font);
+
+        if (state.*) {
+            const off_x: f32 = @floatFromInt(layout.offset_x.*);
+            layout.at_x = header.x + off_x + s.tab.indent;
+            layout.bounds.w = @max(layout.bounds.w, s.tab.indent);
+            layout.bounds.w -= s.tab.indent + s.window.padding.x;
+            layout.row.tree_depth += 1;
+            return true;
+        }
+        return false;
+    }
+
+    /// Begin a collapsible tree node. `seed` disambiguates nodes with the same
+    /// title (pass e.g. `@src().line`). Returns true when expanded — only then
+    /// emit the contents, and call `treePop` (`nk_tree_push_hashed`).
+    pub fn treePush(ctx: *Context, ttype: TreeType, title: []const u8, initial: CollapseState, seed: u32) !bool {
+        const win = ctx.current.?;
+        const key = hash_mod.murmur(title, seed);
+        var collapse = if (win.state.find(key, ctx.seq)) |v| v != 0 else (initial == .maximized);
+        const open = try ctx.treeStateBase(ttype, null, title, &collapse);
+        try win.state.set(ctx.allocator, key, @intFromBool(collapse), ctx.seq);
+        return open;
+    }
+
+    /// Close a tree node opened with `treePush` (`nk_tree_pop`).
+    pub fn treePop(ctx: *Context) void {
+        const layout = ctx.current.?.layout.?;
+        const off_x: f32 = @floatFromInt(layout.offset_x.*);
+        layout.at_x -= ctx.style.tab.indent + off_x;
+        layout.bounds.w += ctx.style.tab.indent + ctx.style.window.padding.x;
+        layout.row.tree_depth -= 1;
+    }
 };
 
 // --- tests ---------------------------------------------------------------
@@ -1065,6 +1169,39 @@ test "clicking the close button hides the window next frame" {
     const visible = try ctx.begin("win", bounds, .{ .title = true, .closable = true });
     ctx.end();
     try std.testing.expect(!visible);
+}
+
+test "tree node persists collapse state and toggles on click" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    // frame 1: starts minimized -> not open
+    ctx.input.begin();
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    const open1 = try ctx.treePush(.tab, "Section", .minimized, 1);
+    if (open1) ctx.treePop();
+    ctx.end();
+    try std.testing.expect(!open1);
+    ctx.clear();
+
+    // frame 2: click the tree header to expand it
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
+    ctx.input.button(.left, 20, 20, true);
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    const open2 = try ctx.treePush(.tab, "Section", .minimized, 1);
+    if (open2) ctx.treePop();
+    ctx.end();
+    try std.testing.expect(open2);
+    ctx.clear();
+
+    // frame 3: state persisted -> still open without further input
+    ctx.input.begin();
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    const open3 = try ctx.treePush(.tab, "Section", .minimized, 1);
+    if (open3) ctx.treePop();
+    ctx.end();
+    try std.testing.expect(open3);
 }
 
 test "hidden window reports not visible" {
