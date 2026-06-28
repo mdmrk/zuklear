@@ -121,11 +121,14 @@ Pattern: pure low-level `do*`/`draw*` module + thin `Context` methods that
 allocate a slot via `widget()`; popups are child windows overlaying the parent
 buffer (`Window.popup`, GC'd by seq).
 
-Remaining (minor; reuse existing foundations): `contextual` (right-click) and
-`tooltip` (reuse `nonblockBegin`), `list_view` (group-based), 9-slice and
-image/symbol selectable variants. Deferred sub-features: text-editor undo/redo
-and multi-line layout, click-to-type property edit, group scrollbars + scroll
-persistence, blocking `popup`.
+Resolved since: text-editor **undo/redo**, **multi-line** editing + vertical
+motion, **click-to-position**, single-line **horizontal scroll**; **property
+click-to-type** editing; **group scrollbars** + cross-frame scroll persistence;
+renderer **arcs/curves** and **images** (software hook + vertex per-batch
+textures). Remaining (minor; reuse existing foundations): `contextual`
+(right-click) and `tooltip` (reuse `nonblockBegin`), `list_view` (group-based),
+9-slice and image/symbol selectable variants, multi-line selection highlight,
+blocking `popup`.
 
 CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
 docs deploy; `zig build docs` emits the autodoc site.
@@ -143,7 +146,9 @@ and text. `examples/wio/gl.zig` is a fixed-function OpenGL 1.1 renderer (loads
 GL via wio, uploads the atlas as an RGBA texture, draws with `glScissor`), and
 `examples/wio/gl_main.zig` is the GL demo (`zig build run-example-gl`).
 `zuklear_font.drawListText` provides the text geometry. A modern GLSL/Vulkan
-backend would reuse `render/vertex.zig` unchanged.
+backend would reuse `render/vertex.zig` unchanged. Both renderers now handle
+arcs, curves and images; only the renderer-defined `custom` callback is left for
+the app to dispatch.
 
 **Phase 7 — wio renderer** ✅ done (software path)
 `render/software.zig` rasterizes the `Command` list to an RGB pixel surface
