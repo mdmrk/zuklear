@@ -28,4 +28,27 @@ pub fn build(b: *std.Build) void {
     });
     const docs_step = b.step("docs", "Build and install the documentation");
     docs_step.dependOn(&install_docs.step);
+
+    // `zig build example` runs the wio software-rendered demo. wio is only
+    // pulled in here, not by the library, so `zig build test`/`docs` stay
+    // dependency-free.
+    const example_step = b.step("example", "Run the wio demo");
+    const wio_dep = b.dependency("wio", .{ .target = target, .optimize = optimize, .enable_framebuffer = true });
+    const example = b.addExecutable(.{
+        .name = "zuklear-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/wio/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zuklear", .module = mod },
+                .{ .name = "wio", .module = wio_dep.module("wio") },
+            },
+        }),
+    });
+    example_step.dependOn(&b.addInstallArtifact(example, .{}).step);
+
+    const run_example = b.addRunArtifact(example);
+    const run_example_step = b.step("run-example", "Build and run the wio demo");
+    run_example_step.dependOn(&run_example.step);
 }
