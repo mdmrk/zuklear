@@ -34,6 +34,7 @@ const scrollbar_widget = @import("scrollbar.zig");
 const selectable_widget = @import("selectable.zig");
 const hash_mod = @import("hash.zig");
 const image_mod = @import("image.zig");
+const knob_widget = @import("knob.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -1167,6 +1168,19 @@ pub const Context = struct {
         const old = cur.*;
         cur.* = try progress_widget.doProgress(&ctx.last_widget_state, &win.buffer, w.bounds, cur.*, max, modifiable, &ctx.style.progress, ctx.widgetInputMut(w.state));
         return cur.* != old;
+    }
+
+    // --- knob -------------------------------------------------------------
+
+    /// A rotary knob; updates `value`, returns whether it changed
+    /// (`nk_knob_float`).
+    pub fn knobFloat(ctx: *Context, min: f32, value: *f32, max: f32, step: f32, zero_direction: math.Heading, dead_zone_percent: f32) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const old = value.*;
+        value.* = try knob_widget.doKnob(&ctx.last_widget_state, &win.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_percent, &ctx.style.knob, ctx.widgetInputMut(w.state));
+        return value.* != old;
     }
 
     // --- selectable -------------------------------------------------------

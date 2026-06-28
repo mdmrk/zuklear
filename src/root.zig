@@ -27,6 +27,7 @@ pub const slider = @import("slider.zig");
 pub const progress = @import("progress.zig");
 pub const scrollbar = @import("scrollbar.zig");
 pub const selectable = @import("selectable.zig");
+pub const knob = @import("knob.zig");
 pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -84,5 +85,6 @@ test {
     _ = progress;
     _ = scrollbar;
     _ = selectable;
+    _ = knob;
     _ = @import("handle.zig");
 }
