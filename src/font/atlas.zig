@@ -31,6 +31,8 @@ pub const Atlas = struct {
     width: u32,
     height: u32,
     pixel_height: f32,
+    /// Distance from the top of a line to the baseline, in pixels.
+    ascent: f32,
     chars: [glyph_count]c.stbtt_packedchar,
 
     pub fn deinit(a: *Atlas) void {
@@ -114,7 +116,7 @@ const vertex = zk.render.vertex;
 pub fn drawListText(dl: *vertex.DrawList, cmd: Text) anyerror!void {
     const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
     var pen_x: f32 = @floatFromInt(cmd.x);
-    const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.pixel_height;
+    const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
     var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
     while (it.nextCodepoint()) |cp| {
         if (a.quad(cp, pen_x, pen_y)) |q| {
@@ -133,11 +135,11 @@ const Text = zk.command.Text;
 pub fn renderText(r: *software.Rasterizer, cmd: Text) void {
     const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
     var pen_x: f32 = @floatFromInt(cmd.x);
-    // baseline: place the glyph row inside the command's box
-    const pen_y: f32 = @floatFromInt(cmd.y);
+    // baseline: stb glyph quads are baseline-relative, so drop by the ascent
+    const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
     var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
     while (it.nextCodepoint()) |cp| {
-        if (a.quad(cp, pen_x, pen_y + a.pixel_height)) |q| {
+        if (a.quad(cp, pen_x, pen_y)) |q| {
             blitQuad(r, a, q, cmd.foreground);
             pen_x += q.xadvance;
         }
@@ -188,7 +190,19 @@ pub fn bake(allocator: std.mem.Allocator, ttf: []const u8, pixel_height: f32, wi
         .height = height,
         .pixel_height = pixel_height,
         .chars = undefined,
+        .ascent = pixel_height,
     };
+
+    // baseline: place glyph quads at top + ascent (stb quads are baseline-relative)
+    var info: c.stbtt_fontinfo = undefined;
+    if (c.stbtt_InitFont(&info, ttf.ptr, c.stbtt_GetFontOffsetForIndex(ttf.ptr, 0)) != 0) {
+        const scale = c.stbtt_ScaleForPixelHeight(&info, pixel_height);
+        var ascent: c_int = undefined;
+        var descent: c_int = undefined;
+        var line_gap: c_int = undefined;
+        c.stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+        atlas.ascent = @as(f32, @floatFromInt(ascent)) * scale;
+    }
 
     var spc: c.stbtt_pack_context = undefined;
     if (c.stbtt_PackBegin(&spc, bitmap.ptr, @intCast(width), @intCast(height), 0, 1, null) == 0)
@@ -218,6 +232,9 @@ test "bakes a TTF into a non-empty atlas with sane metrics" {
         if (px != 0) nonzero += 1;
     }
     try std.testing.expect(nonzero > 0);
+
+    // the baseline ascent is set and sits within the line box
+    try std.testing.expect(atlas.ascent > 0 and atlas.ascent < atlas.pixel_height);
 
     // 'M' should have a positive advance and a valid quad
     try std.testing.expect(atlas.advance('M') > 0);
