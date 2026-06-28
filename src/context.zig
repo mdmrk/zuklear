@@ -637,6 +637,56 @@ pub const Context = struct {
             layout.offset_x.* = @intFromFloat(@max(0, hnew));
         }
 
+        // window resize scaler (bottom-right grip)
+        if (layout.flags.scalable and !layout.flags.minimized and !layout.flags.no_input) {
+            var scaler = Rect{
+                .w = scrollbar_size.x,
+                .h = scrollbar_size.y,
+                .y = layout.bounds.y + layout.bounds.h,
+            };
+            scaler.x = if (layout.flags.scale_left)
+                layout.bounds.x - panel_padding.x * 0.5
+            else
+                layout.bounds.x + layout.bounds.w + panel_padding.x;
+            if (layout.flags.no_scrollbar) scaler.x -= scaler.w;
+
+            switch (s.window.scaler) {
+                .image => |img| out.drawImage(scaler, img, Color.white) catch {},
+                .nine_slice => |sl| out.drawNineSlice(scaler, sl, Color.white) catch {},
+                .color => |col| if (layout.flags.scale_left)
+                    out.fillTriangle(scaler.x, scaler.y, scaler.x, scaler.y + scaler.h, scaler.x + scaler.w, scaler.y + scaler.h, col) catch {}
+                else
+                    out.fillTriangle(scaler.x + scaler.w, scaler.y, scaler.x + scaler.w, scaler.y + scaler.h, scaler.x, scaler.y + scaler.h, col) catch {},
+            }
+
+            if (!layout.flags.rom) {
+                const in = &ctx.input;
+                const min_size = s.window.min_size;
+                if (in.mouse.buttons[@intFromEnum(input_mod.Button.left)].down and in.hasMouseClickDownInRect(.left, scaler, true)) {
+                    var delta_x = in.mouse.delta.x;
+                    if (layout.flags.scale_left) {
+                        delta_x = -delta_x;
+                        win.bounds.x += in.mouse.delta.x;
+                    }
+                    if (win.bounds.w + delta_x >= min_size.x) {
+                        if (delta_x < 0 or (delta_x > 0 and in.mouse.pos.x >= scaler.x)) {
+                            win.bounds.w += delta_x;
+                            scaler.x += in.mouse.delta.x;
+                        }
+                    }
+                    if (!layout.flags.dynamic and min_size.y < win.bounds.h + in.mouse.delta.y) {
+                        if (in.mouse.delta.y < 0 or (in.mouse.delta.y > 0 and in.mouse.pos.y >= scaler.y)) {
+                            win.bounds.h += in.mouse.delta.y;
+                            scaler.y += in.mouse.delta.y;
+                        }
+                    }
+                    s.cursor_active = s.cursors[@intFromEnum(style_mod.CursorType.resize_top_right_down_left)];
+                    in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.x = scaler.x + scaler.w / 2.0;
+                    in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.y = scaler.y + scaler.h / 2.0;
+                }
+            }
+        }
+
         if (layout.flags.border) {
             const border_color = panelGetBorderColor(s, layout.type);
             const padding_y = if (layout.flags.minimized)
@@ -708,6 +758,160 @@ pub const Context = struct {
     /// (`nk_layout_row_static`).
     pub fn layoutRowStatic(ctx: *Context, height: f32, item_width: f32, cols: i32) void {
         ctx.rowLayout(.static, height, cols, item_width);
+    }
+
+    /// Begin a row with per-column widths given by `ratio` (fractions of the row
+    /// for `.dynamic`, pixels for `.static`); a negative entry means "share the
+    /// remaining space" (`nk_layout_row`). `ratio` must outlive the row.
+    pub fn layoutRow(ctx: *Context, fmt: LayoutFormat, height: f32, ratio: []const f32) void {
+        const layout = ctx.current.?.layout.?;
+        ctx.panelLayout(height, @intCast(ratio.len));
+        if (fmt == .dynamic) {
+            var r: f32 = 0;
+            var n_undef: i32 = 0;
+            layout.row.ratio = ratio;
+            for (ratio) |x| {
+                if (x < 0) n_undef += 1 else r += x;
+            }
+            r = std.math.clamp(1.0 - r, 0, 1);
+            layout.row.type = .dynamic;
+            layout.row.item_width = if (r > 0 and n_undef > 0) r / @as(f32, @floatFromInt(n_undef)) else 0;
+        } else {
+            layout.row.ratio = ratio;
+            layout.row.type = .static;
+            layout.row.item_width = 0;
+        }
+        layout.row.item_offset = 0;
+        layout.row.filled = 0;
+    }
+
+    /// Begin a row whose column widths are supplied one at a time with
+    /// `layoutRowPush` (`nk_layout_row_begin`).
+    pub fn layoutRowBegin(ctx: *Context, fmt: LayoutFormat, row_height: f32, cols: i32) void {
+        const layout = ctx.current.?.layout.?;
+        ctx.panelLayout(row_height, cols);
+        layout.row.type = if (fmt == .dynamic) .dynamic_row else .static_row;
+        layout.row.ratio = null;
+        layout.row.filled = 0;
+        layout.row.item_width = 0;
+        layout.row.item_offset = 0;
+        layout.row.columns = cols;
+    }
+
+    /// Set the width of the next column in a `layoutRowBegin` row (fraction for
+    /// dynamic, pixels for static) (`nk_layout_row_push`).
+    pub fn layoutRowPush(ctx: *Context, ratio_or_width: f32) void {
+        const layout = ctx.current.?.layout.?;
+        if (layout.row.type == .dynamic_row) {
+            if (ratio_or_width + layout.row.filled > 1.0) return;
+            layout.row.item_width = if (ratio_or_width > 0) std.math.clamp(ratio_or_width, 0, 1) else 1.0 - layout.row.filled;
+        } else {
+            layout.row.item_width = ratio_or_width;
+        }
+    }
+
+    /// Finish a `layoutRowBegin` row (`nk_layout_row_end`).
+    pub fn layoutRowEnd(ctx: *Context) void {
+        const layout = ctx.current.?.layout.?;
+        layout.row.item_width = 0;
+        layout.row.item_offset = 0;
+    }
+
+    /// Begin free widget placement; positions are set per widget with
+    /// `layoutSpacePush` (`nk_layout_space_begin`).
+    pub fn layoutSpaceBegin(ctx: *Context, fmt: LayoutFormat, height: f32, widget_count: i32) void {
+        const layout = ctx.current.?.layout.?;
+        ctx.panelLayout(height, widget_count);
+        layout.row.type = if (fmt == .static) .static_free else .dynamic_free;
+        layout.row.ratio = null;
+        layout.row.filled = 0;
+        layout.row.item_width = 0;
+        layout.row.item_offset = 0;
+    }
+
+    /// Position the next free-placed widget (`nk_layout_space_push`).
+    pub fn layoutSpacePush(ctx: *Context, rect: Rect) void {
+        ctx.current.?.layout.?.row.item = rect;
+    }
+
+    /// Finish free placement (`nk_layout_space_end`).
+    pub fn layoutSpaceEnd(ctx: *Context) void {
+        const layout = ctx.current.?.layout.?;
+        layout.row.item_width = 0;
+        layout.row.item_height = 0;
+        layout.row.item_offset = 0;
+        layout.row.item = .{};
+    }
+
+    /// Begin a template row mixing dynamic/variable/static columns
+    /// (`nk_layout_row_template_begin`).
+    pub fn layoutRowTemplateBegin(ctx: *Context, height: f32) void {
+        const layout = ctx.current.?.layout.?;
+        ctx.panelLayout(height, 1);
+        layout.row.type = .template;
+        layout.row.columns = 0;
+        layout.row.ratio = null;
+        layout.row.item_width = 0;
+        layout.row.item_height = 0;
+        layout.row.item_offset = 0;
+        layout.row.filled = 0;
+        layout.row.item = .{};
+    }
+
+    fn templatePush(ctx: *Context, value: f32) void {
+        const layout = ctx.current.?.layout.?;
+        if (layout.row.columns >= layout.row.templates.len) return;
+        layout.row.templates[@intCast(layout.row.columns)] = value;
+        layout.row.columns += 1;
+    }
+
+    /// A column that shares leftover space equally (`..._push_dynamic`).
+    pub fn layoutRowTemplatePushDynamic(ctx: *Context) void {
+        ctx.templatePush(-1.0);
+    }
+    /// A column at least `min_width` px, growing into leftover space
+    /// (`..._push_variable`).
+    pub fn layoutRowTemplatePushVariable(ctx: *Context, min_width: f32) void {
+        ctx.templatePush(-min_width);
+    }
+    /// A fixed-width column (`..._push_static`).
+    pub fn layoutRowTemplatePushStatic(ctx: *Context, width: f32) void {
+        ctx.templatePush(width);
+    }
+
+    /// Resolve template column widths (`nk_layout_row_template_end`).
+    pub fn layoutRowTemplateEnd(ctx: *Context) void {
+        const layout = ctx.current.?.layout.?;
+        var variable_count: i32 = 0;
+        var min_variable_count: i32 = 0;
+        var min_fixed_width: f32 = 0;
+        var total_fixed_width: f32 = 0;
+        var max_variable_width: f32 = 0;
+
+        const cols: usize = @intCast(layout.row.columns);
+        for (layout.row.templates[0..cols]) |w| {
+            if (w >= 0) {
+                total_fixed_width += w;
+                min_fixed_width += w;
+            } else if (w < -1.0) {
+                const width = -w;
+                total_fixed_width += width;
+                max_variable_width = @max(max_variable_width, width);
+                variable_count += 1;
+            } else {
+                min_variable_count += 1;
+                variable_count += 1;
+            }
+        }
+        if (variable_count == 0) return;
+
+        const space = usableSpace(&ctx.style, layout.bounds.w, layout.row.columns);
+        var var_width = @max(space - min_fixed_width, 0) / @as(f32, @floatFromInt(variable_count));
+        const enough_space = var_width >= max_variable_width;
+        if (!enough_space) var_width = @max(space - total_fixed_width, 0) / @as(f32, @floatFromInt(min_variable_count));
+        for (layout.row.templates[0..cols]) |*w| {
+            w.* = if (w.* >= 0) w.* else if (w.* < -1.0 and !enough_space) -w.* else var_width;
+        }
     }
 
     fn frac(x: f32) f32 {
@@ -1302,6 +1506,49 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "ratio row sizes columns proportionally" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    ctx.input.mouse.pos = .{ .x = 20, .y = 50 };
+    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    ctx.layoutRow(.dynamic, 30, &.{ 0.25, 0.75 });
+    const a = ctx.widget();
+    const b = ctx.widget();
+    // second column ~3x the width of the first
+    try std.testing.expect(b.bounds.w > a.bounds.w * 2);
+    ctx.end();
+}
+
+test "template row gives variable column the leftover space" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    ctx.layoutRowTemplateBegin(30);
+    ctx.layoutRowTemplatePushStatic(40);
+    ctx.layoutRowTemplatePushDynamic();
+    ctx.layoutRowTemplateEnd();
+    const fixed = ctx.widget();
+    const dynamic = ctx.widget();
+    try std.testing.expectApproxEqAbs(fixed.bounds.w, 40, 0.5);
+    try std.testing.expect(dynamic.bounds.w > 100);
+    ctx.end();
+}
+
+test "scaler drag grows a scalable window" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    const w0: f32 = 200;
+    // press on the bottom-right scaler grip, then drag right+down
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 195, .y = 195 };
+    ctx.input.button(.left, 195, 195, true);
+    ctx.input.mouse.pos = .{ .x = 230, .y = 230 };
+    ctx.input.mouse.delta = .{ .x = 35, .y = 35 };
+    _ = try ctx.begin("w", Rect.init(0, 0, w0, 200), .{ .scalable = true });
+    ctx.end();
+    try std.testing.expect(ctx.lookup.get("w").?.bounds.w > w0);
 }
 
 test "hidden window reports not visible" {
