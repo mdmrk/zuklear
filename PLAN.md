@@ -77,15 +77,19 @@ Also landed the foundational `handle.zig` (`Handle`), `image.zig`
 (`Image`/`NineSlice`) and `font.zig` (`UserFont` interface + `textClamp`),
 which the draw layer depends on.
 
-**Phase 3 — Context, style, window, panel, layout** 🚧 core landed
-`style.zig` ✅, `hash.zig` ✅, `context.zig` ✅ (window + panel + layout in one
-module: persistent windows with z-order list + name map + seq GC; begin/end;
-panel begin/end with header background+title, window background, border, clip;
-the row-layout engine `layoutRow*` + `widget` bounds allocation with the full
-row-type switch). Smoke-tested begin/layout/widget/end + window reuse/GC.
-Remaining in Phase 3: `group.zig` (sub-windows), public APIs for the other row
-layouts (ratio rows, `layoutSpace`, template), and the bits deferred until the
-widgets exist (header close/minimize buttons, scrollbars, resize scaler).
+**Phase 3 — Context, style, window, panel, layout** ✅ done
+`style.zig`, `hash.zig`, `context.zig` (window + panel + layout in one module:
+persistent windows with z-order list + name map + seq GC; begin/end; panel
+begin/end with header background+title + close/minimize buttons, window
+background, border, clip, scrollbars and the resize scaler; the full row-layout
+engine — dynamic/static/ratio rows, row begin/push/end, free-placement space,
+and template rows — plus `widget` bounds allocation; and `group` sub-windows
+via the `Panel.parent` chain with buffer aliasing). Tested: begin/layout/widget/
+end, window reuse/GC, header close button, ratio/template rows, scaler drag,
+tree state persistence, nested group.
+Deferred to later (not blocking): group scrollbars + cross-frame group scroll
+persistence (need the sub-window scrollbar path), and the simplified
+window-focus/z-order-on-click.
 
 Memory-model decisions for the idiomatic core (replacing Nuklear's
 pool/page/freelist machinery):
