@@ -106,12 +106,18 @@ pool/page/freelist machinery):
   offsets.
 - **Config (style push/pop) stacks**: bounded arrays sized as upstream.
 
-**Phase 4 — Widgets**
-`widget.zig`, `text.zig`, `button.zig`, `toggle.zig`, `selectable.zig`,
-`slider.zig`, `progress.zig`, `scrollbar.zig`, `property.zig`, `knob.zig`,
-`edit.zig` + `text_editor.zig`, `combo.zig`, `contextual.zig`, `menu.zig`,
-`tooltip.zig`, `tree.zig`, `chart.zig`, `popup.zig`, `table.zig`,
-`list_view.zig`, `color_picker.zig`, `image.zig`, `9slice.zig`.
+**Phase 4 — Widgets** 🚧 started
+`widget.zig` ✅ (shared LayoutState/ButtonBehavior/States), `text.zig` ✅
+(label/text), `button.zig` ✅ (text button + behavior). Pattern established:
+each widget is a pure low-level module (`do*`/`draw*` taking
+CommandBuffer/Input/style) plus thin `Context` methods that allocate a layout
+slot. Remaining: `toggle.zig` (checkbox/radio), `selectable.zig`, `slider.zig`,
+`progress.zig`, `scrollbar.zig` (also unblocks panel scrollbars), `knob.zig`,
+`property.zig`, `edit.zig` + `text_editor.zig`, `combo.zig`, `contextual.zig`,
+`menu.zig`, `tooltip.zig`, `tree.zig`, `chart.zig`, `popup.zig`, `table.zig`,
+`list_view.zig`, `color_picker.zig`, image/9slice widgets, plus symbol drawing
+(`nk_draw_symbol`) used by many. Then finish the deferred panel pieces (header
+buttons, scrollbars, scaler).
 
 **Phase 5 — Font**
 `rect_pack.zig` (idiomatic Zig port of stb_rect_pack). `stb_truetype.h` kept as C,
