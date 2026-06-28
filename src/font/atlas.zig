@@ -98,7 +98,31 @@ pub const Atlas = struct {
             .width = &widthFn,
         };
     }
+
+    /// UV of the reserved white texel (for solid fills in the vertex pipeline).
+    pub fn whiteUv(a: *const Atlas) [2]f32 {
+        const w: f32 = @floatFromInt(a.width);
+        const h: f32 = @floatFromInt(a.height);
+        return .{ (w - 0.5) / w, (h - 0.5) / h };
+    }
 };
+
+const vertex = zk.render.vertex;
+
+/// A `vertex.ConvertConfig.text_hook` that emits glyph quads (with atlas UVs)
+/// into a draw list. Recovers the `Atlas` from the text command's font.
+pub fn drawListText(dl: *vertex.DrawList, cmd: Text) anyerror!void {
+    const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
+    var pen_x: f32 = @floatFromInt(cmd.x);
+    const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.pixel_height;
+    var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
+    while (it.nextCodepoint()) |cp| {
+        if (a.quad(cp, pen_x, pen_y)) |q| {
+            try dl.quadUV(q.x0, q.y0, q.x1, q.y1, q.u0, q.v0, q.u1, q.v1, cmd.foreground);
+            pen_x += q.xadvance;
+        }
+    }
+}
 
 const software = zk.render.software;
 const Text = zk.command.Text;
@@ -174,6 +198,9 @@ pub fn bake(allocator: std.mem.Allocator, ttf: []const u8, pixel_height: f32, wi
         return error.PackFontRangeFailed;
     }
     c.stbtt_PackEnd(&spc);
+    // reserve a white texel in the (typically unused) bottom-right corner for
+    // solid fills in the vertex/GL pipeline.
+    bitmap[width * height - 1] = 255;
     return atlas;
 }
 

@@ -49,24 +49,45 @@ pub fn build(b: *std.Build) void {
     // `zig build example` runs the wio software-rendered demo. wio is only
     // pulled in here, not by the library, so `zig build test`/`docs` stay
     // dependency-free.
-    const example_step = b.step("example", "Run the wio demo");
-    const wio_dep = b.dependency("wio", .{ .target = target, .optimize = optimize, .enable_framebuffer = true });
+    const wio_dep = b.dependency("wio", .{
+        .target = target,
+        .optimize = optimize,
+        .enable_framebuffer = true,
+        .enable_opengl = true,
+    });
+    const wio_imports = [_]std.Build.Module.Import{
+        .{ .name = "zuklear", .module = mod },
+        .{ .name = "zuklear_font", .module = font_mod },
+        .{ .name = "wio", .module = wio_dep.module("wio") },
+    };
+
+    // Software-rendered demo.
     const example = b.addExecutable(.{
         .name = "zuklear-demo",
         .root_module = b.createModule(.{
             .root_source_file = b.path("examples/wio/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zuklear", .module = mod },
-                .{ .name = "zuklear_font", .module = font_mod },
-                .{ .name = "wio", .module = wio_dep.module("wio") },
-            },
+            .imports = &wio_imports,
         }),
     });
+    const example_step = b.step("example", "Build the software-rendered wio demo");
     example_step.dependOn(&b.addInstallArtifact(example, .{}).step);
+    const run_example_step = b.step("run-example", "Build and run the software demo");
+    run_example_step.dependOn(&b.addRunArtifact(example).step);
 
-    const run_example = b.addRunArtifact(example);
-    const run_example_step = b.step("run-example", "Build and run the wio demo");
-    run_example_step.dependOn(&run_example.step);
+    // OpenGL-rendered demo.
+    const example_gl = b.addExecutable(.{
+        .name = "zuklear-demo-gl",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/wio/gl_main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &wio_imports,
+        }),
+    });
+    const example_gl_step = b.step("example-gl", "Build the OpenGL wio demo");
+    example_gl_step.dependOn(&b.addInstallArtifact(example_gl, .{}).step);
+    const run_example_gl_step = b.step("run-example-gl", "Build and run the OpenGL demo");
+    run_example_gl_step.dependOn(&b.addRunArtifact(example_gl).step);
 }
