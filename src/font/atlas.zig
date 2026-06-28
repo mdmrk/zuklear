@@ -69,11 +69,17 @@ pub const Atlas = struct {
         const pc = a.packed_(cp) orelse return null;
         const w: f32 = @floatFromInt(a.width);
         const h: f32 = @floatFromInt(a.height);
+        // snap to an integer top-left and use the exact source size so the
+        // glyph maps 1:1 to texels (crisp with nearest-neighbour sampling).
+        const dx = @round(pen_x + pc.xoff);
+        const dy = @round(pen_y + pc.yoff);
+        const gw: f32 = @floatFromInt(pc.x1 - pc.x0);
+        const gh: f32 = @floatFromInt(pc.y1 - pc.y0);
         return .{
-            .x0 = pen_x + pc.xoff,
-            .y0 = pen_y + pc.yoff,
-            .x1 = pen_x + pc.xoff2,
-            .y1 = pen_y + pc.yoff2,
+            .x0 = dx,
+            .y0 = dy,
+            .x1 = dx + gw,
+            .y1 = dy + gh,
             .u0 = @as(f32, @floatFromInt(pc.x0)) / w,
             .v0 = @as(f32, @floatFromInt(pc.y0)) / h,
             .u1 = @as(f32, @floatFromInt(pc.x1)) / w,
@@ -129,49 +135,31 @@ pub fn drawListText(dl: *vertex.DrawList, cmd: Text) anyerror!void {
 const software = zk.render.software;
 const Text = zk.command.Text;
 
-/// A `software.Rasterizer.text_fn` that alpha-blits baked glyphs. It recovers
-/// the `Atlas` from the text command's font userdata, so any baked `UserFont`
-/// works. Assign it to `rasterizer.text_fn`.
+/// A `software.Rasterizer.text_fn` that blits baked glyphs **1:1** (one atlas
+/// texel per pixel, no resampling). It recovers the `Atlas` from the text
+/// command's font userdata. Assign it to `rasterizer.text_fn`.
 pub fn renderText(r: *software.Rasterizer, cmd: Text) void {
     const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
     var pen_x: f32 = @floatFromInt(cmd.x);
-    // baseline: stb glyph quads are baseline-relative, so drop by the ascent
-    const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
+    const baseline: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
     var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
     while (it.nextCodepoint()) |cp| {
-        if (a.quad(cp, pen_x, pen_y)) |q| {
-            blitQuad(r, a, q, cmd.foreground);
-            pen_x += q.xadvance;
-        }
-    }
-}
-
-fn blitQuad(r: *software.Rasterizer, a: *const Atlas, q: Atlas.Quad, color: zk.Color) void {
-    const x0: i32 = @intFromFloat(@floor(q.x0));
-    const y0: i32 = @intFromFloat(@floor(q.y0));
-    const x1: i32 = @intFromFloat(@ceil(q.x1));
-    const y1: i32 = @intFromFloat(@ceil(q.y1));
-    const sx0 = q.u0 * @as(f32, @floatFromInt(a.width));
-    const sy0 = q.v0 * @as(f32, @floatFromInt(a.height));
-    const dw = @max(q.x1 - q.x0, 1);
-    const dh = @max(q.y1 - q.y0, 1);
-    const sw = (q.u1 - q.u0) * @as(f32, @floatFromInt(a.width));
-    const sh = (q.v1 - q.v0) * @as(f32, @floatFromInt(a.height));
-
-    var y = y0;
-    while (y < y1) : (y += 1) {
-        var x = x0;
-        while (x < x1) : (x += 1) {
-            const fx = (@as(f32, @floatFromInt(x)) + 0.5 - q.x0) / dw;
-            const fy = (@as(f32, @floatFromInt(y)) + 0.5 - q.y0) / dh;
-            const sxi: i32 = @intFromFloat(sx0 + fx * sw);
-            const syi: i32 = @intFromFloat(sy0 + fy * sh);
-            if (sxi < 0 or syi < 0 or sxi >= @as(i32, @intCast(a.width)) or syi >= @as(i32, @intCast(a.height))) continue;
-            const cov = a.bitmap[@as(usize, @intCast(syi)) * a.width + @as(usize, @intCast(sxi))];
-            if (cov == 0) continue;
-            var col = color;
-            col.a = @intCast((@as(u16, color.a) * cov) / 255);
-            r.plot(x, y, col);
+        if (a.packed_(cp)) |pc| {
+            // integer top-left of the glyph; copy the source rect texel-for-pixel
+            const dx: i32 = @intFromFloat(@round(pen_x + pc.xoff));
+            const dy: i32 = @intFromFloat(@round(baseline + pc.yoff));
+            var sy: u32 = pc.y0;
+            while (sy < pc.y1) : (sy += 1) {
+                var sx: u32 = pc.x0;
+                while (sx < pc.x1) : (sx += 1) {
+                    const cov = a.bitmap[sy * a.width + sx];
+                    if (cov == 0) continue;
+                    var col = cmd.foreground;
+                    col.a = @intCast((@as(u16, col.a) * cov) / 255);
+                    r.plot(dx + @as(i32, @intCast(sx - pc.x0)), dy + @as(i32, @intCast(sy - pc.y0)), col);
+                }
+            }
+            pen_x += pc.xadvance;
         }
     }
 }

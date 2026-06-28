@@ -30,7 +30,7 @@ const COLOR_BUFFER_BIT: u32 = 0x4000;
 const RGBA: u32 = 0x1908;
 const TEXTURE_MIN_FILTER: u32 = 0x2801;
 const TEXTURE_MAG_FILTER: u32 = 0x2800;
-const LINEAR: u32 = 0x2601;
+const NEAREST: u32 = 0x2600;
 const UNPACK_ALIGNMENT: u32 = 0x0CF5;
 
 /// Matches `wio.glGetProcAddress`.
@@ -91,8 +91,8 @@ pub const Renderer = struct {
         r.gl.GenTextures(1, @ptrCast(&r.texture));
         r.gl.BindTexture(TEXTURE_2D, r.texture);
         r.gl.PixelStorei(UNPACK_ALIGNMENT, 1);
-        r.gl.TexParameteri(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR);
-        r.gl.TexParameteri(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR);
+        r.gl.TexParameteri(TEXTURE_2D, TEXTURE_MIN_FILTER, NEAREST);
+        r.gl.TexParameteri(TEXTURE_2D, TEXTURE_MAG_FILTER, NEAREST);
         r.gl.TexImage2D(TEXTURE_2D, 0, RGBA, @intCast(atlas.width), @intCast(atlas.height), 0, RGBA, UNSIGNED_BYTE, rgba.ptr);
     }
 
