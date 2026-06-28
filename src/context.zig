@@ -212,6 +212,9 @@ pub const Panel = struct {
     row: RowLayout = .{},
     buffer: *CommandBuffer = undefined,
     parent: ?*Panel = null,
+    /// Panel-local scroll storage that `offset_x`/`offset_y` point at for groups
+    /// (cross-frame group scroll persistence is a TODO with sub-scrollbars).
+    scroll: Scroll = .{},
 };
 
 /// A persistent window (`nk_window`). Created on first `begin`, reused across
@@ -425,7 +428,9 @@ pub const Context = struct {
         const layout = win.layout.?;
         const s = &ctx.style;
         const font = s.font.?;
-        const out = &win.buffer;
+        // Draw through the panel's buffer pointer (a sub-panel/group aliases the
+        // parent window's buffer), not `&win.buffer`.
+        const out = layout.buffer;
 
         if (win.flags.hidden or win.flags.closed) {
             layout.* = .{ .buffer = out, .offset_x = layout.offset_x, .offset_y = layout.offset_y, .type = panel_type };
@@ -576,7 +581,7 @@ pub const Context = struct {
         }
 
         // clip rectangle
-        const clip = win.buffer.clip.unify(
+        const clip = out.clip.unify(
             layout.bounds.x,
             layout.bounds.y,
             layout.bounds.x + layout.bounds.w,
@@ -591,7 +596,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const layout = win.layout.?;
         const s = &ctx.style;
-        const out = &win.buffer;
+        const out = layout.buffer;
 
         const font = s.font.?;
         const scrollbar_size = s.window.scrollbar_size;
@@ -1062,6 +1067,82 @@ pub const Context = struct {
         layout.bounds.w += ctx.style.tab.indent + ctx.style.window.padding.x;
         layout.row.tree_depth -= 1;
     }
+
+    // --- group (sub-window) -----------------------------------------------
+
+    /// Begin a scrollable sub-region in the current row. Returns true when
+    /// visible — only then emit contents and call `groupEnd` (`nk_group_begin`).
+    /// NOTE: group scrollbars and cross-frame scroll persistence are TODO; the
+    /// sub-panel lays out and clips correctly.
+    pub fn groupBegin(ctx: *Context, title: []const u8, flags: WindowFlags) !bool {
+        const win = ctx.current.?;
+        const bounds = ctx.panelAllocSpace();
+        if (!win.layout.?.clip.intersects(bounds) and !flags.movable) return false;
+
+        var gflags = flags;
+        if (win.flags.rom) gflags.rom = true;
+
+        const sub = try ctx.allocator.create(Panel);
+        sub.* = .{ .buffer = &win.buffer };
+        sub.offset_x = &sub.scroll.x;
+        sub.offset_y = &sub.scroll.y;
+
+        var fake: Window = .{
+            .name = "",
+            .buffer = undefined,
+            .bounds = bounds,
+            .flags = gflags,
+            .layout = sub,
+        };
+        ctx.current = &fake;
+        _ = ctx.panelBegin(if (gflags.title) title else "", .group);
+        sub.parent = win.layout;
+        win.layout = sub;
+        ctx.current = win;
+
+        if (sub.flags.closed or sub.flags.minimized) {
+            ctx.groupEnd();
+            return false;
+        }
+        return true;
+    }
+
+    /// Close a group opened with `groupBegin` (`nk_group_end`).
+    pub fn groupEnd(ctx: *Context) void {
+        const win = ctx.current.?;
+        const g = win.layout.?;
+        const parent = g.parent.?;
+        const s = &ctx.style;
+        const panel_padding = panelGetPadding(s, .group);
+
+        var pb = Rect{
+            .x = g.bounds.x - panel_padding.x,
+            .y = g.bounds.y - g.header_height,
+            .w = g.bounds.w + 2 * panel_padding.x,
+            .h = g.bounds.h + g.header_height,
+        };
+        if (g.flags.border) {
+            pb.x -= g.border;
+            pb.y -= g.border;
+            pb.w += 2 * g.border;
+            pb.h += 2 * g.border;
+        }
+        if (!g.flags.no_scrollbar) {
+            pb.w += s.window.scrollbar_size.x;
+            pb.h += s.window.scrollbar_size.y;
+        }
+
+        var pan: Window = .{ .name = "", .buffer = undefined, .bounds = pb, .flags = g.flags, .layout = g };
+        ctx.current = &pan;
+        const clip = parent.clip.unify(pb.x, pb.y, pb.x + pb.w, pb.y + pb.h + panel_padding.x);
+        g.buffer.pushScissor(clip) catch {};
+        ctx.panelEnd();
+        g.buffer.pushScissor(parent.clip) catch {};
+
+        ctx.current = win;
+        win.layout = parent;
+        ctx.allocator.destroy(g);
+    }
 };
 
 // --- tests ---------------------------------------------------------------
@@ -1202,6 +1283,25 @@ test "tree node persists collapse state and toggles on click" {
     if (open3) ctx.treePop();
     ctx.end();
     try std.testing.expect(open3);
+}
+
+test "group lays out a nested sub-panel" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    _ = try ctx.begin("w", Rect.init(0, 0, 300, 300), .{});
+    ctx.layoutRowDynamic(200, 1);
+    const open = try ctx.groupBegin("g", .{ .border = true });
+    try std.testing.expect(open);
+    // the window's layout is now the group's sub-panel (parent chained)
+    try std.testing.expect(ctx.current.?.layout.?.parent != null);
+    ctx.layoutRowDynamic(20, 1);
+    const a = ctx.widget();
+    try std.testing.expect(a.bounds.w > 0);
+    ctx.groupEnd();
+    // back to the window's own panel
+    try std.testing.expect(ctx.current.?.layout.?.parent == null);
+    ctx.end();
 }
 
 test "hidden window reports not visible" {
