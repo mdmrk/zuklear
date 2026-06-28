@@ -33,6 +33,7 @@ pub const text_editor = @import("text_editor.zig");
 pub const builtin_font = @import("font/builtin.zig");
 pub const render = struct {
     pub const software = @import("render/software.zig");
+    pub const vertex = @import("render/vertex.zig");
 };
 pub const Handle = @import("handle.zig").Handle;
 
@@ -96,5 +97,6 @@ test {
     _ = text_editor;
     _ = builtin_font;
     _ = render.software;
+    _ = render.vertex;
     _ = @import("handle.zig");
 }
