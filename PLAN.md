@@ -135,12 +135,22 @@ docs deploy; `zig build docs` emits the autodoc site.
 integrated through `build.zig` and wrapped by `font.zig` (atlas baking). Also port
 the user-font interface so apps can supply their own font.
 
-**Phase 6 — Vertex / draw list**
-`vertex.zig` (convert `Command` buffer → vertex/index buffers for HW renderers).
+**Phase 6 — Vertex / draw list** — not needed for the software path
+`vertex.zig` (convert `Command` buffer → vertex/index buffers) would be for a
+hardware (GL/Vulkan) renderer; the software rasterizer consumes commands
+directly, so this is deferred until a HW backend is wanted.
 
-**Phase 7 — wio renderer (later, per request)**
-`renderers/wio.zig`: rasterize the command buffer to a wio software `Framebuffer`
-(and/or a GL renderer via the Phase 6 vertex output). Example app under `examples/`.
+**Phase 7 — wio renderer** ✅ done (software path)
+`render/software.zig` rasterizes the `Command` list to an RGB pixel surface
+(scissor, rects, lines, triangles, circles, gradients, polygons, text, alpha
+blend). `font/builtin.zig` provides an 8x8 bitmap `UserFont` so text renders
+without baking. `examples/wio/main.zig` is the working demo: wio window +
+input + framebuffer driving a full UI (`zig build example` / `run-example`).
+Curves/arcs/images in the rasterizer and a GL backend are TODO.
+
+**Phase 5 — Font baking** — optional, deferred
+The built-in bitmap font covers text; the stb-based atlas baker (`rect_pack`
+port + `stb_truetype` as C) remains a future enhancement for TTF fonts.
 
 ## Commit policy
 

@@ -11,10 +11,22 @@ unions and flag structs.
 ## Build
 
 ```sh
-zig build test   # run the test suite
+zig build test         # run the test suite
+zig build example      # build the wio software-rendered demo (zig-out/bin)
+zig build run-example  # build and run the demo
 ```
 
-Requires Zig `0.16.0`.
+Requires Zig `0.16.0`. The demo depends on [wio](https://github.com/ypsvlq/wio)
+(a path dependency); the library itself has no dependencies.
+
+## Status
+
+Phases 1–4 (foundations, drawing/input, context+layout, widgets) and a software
+renderer with a wio demo are implemented. See [`PLAN.md`](PLAN.md). Widgets:
+label, button, checkbox, radio, slider, progress, knob, scrollbar, selectable,
+tree, group, combo, menu, image, chart, color picker, single-line text edit and
+numeric property — rendered to a window via `render.software` + the built-in
+bitmap font.
 
 ## License
 
