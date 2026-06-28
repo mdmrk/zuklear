@@ -106,18 +106,20 @@ pool/page/freelist machinery):
   offsets.
 - **Config (style push/pop) stacks**: bounded arrays sized as upstream.
 
-**Phase 4 — Widgets** 🚧 started
-`widget.zig` ✅ (shared LayoutState/ButtonBehavior/States), `text.zig` ✅
-(label/text), `button.zig` ✅ (text button + behavior). Pattern established:
-each widget is a pure low-level module (`do*`/`draw*` taking
-CommandBuffer/Input/style) plus thin `Context` methods that allocate a layout
-slot. Remaining: `toggle.zig` (checkbox/radio), `selectable.zig`, `slider.zig`,
-`progress.zig`, `scrollbar.zig` (also unblocks panel scrollbars), `knob.zig`,
-`property.zig`, `edit.zig` + `text_editor.zig`, `combo.zig`, `contextual.zig`,
-`menu.zig`, `tooltip.zig`, `tree.zig`, `chart.zig`, `popup.zig`, `table.zig`,
-`list_view.zig`, `color_picker.zig`, image/9slice widgets, plus symbol drawing
-(`nk_draw_symbol`) used by many. Then finish the deferred panel pieces (header
-buttons, scrollbars, scaler).
+**Phase 4 — Widgets** 🚧 in progress
+Done: `widget.zig` (shared LayoutState/ButtonBehavior/States), `text.zig`
+(label), `button.zig` (text + symbol button), `toggle.zig` (checkbox/radio),
+`slider.zig`, `progress.zig`, `symbol.zig` (`nk_draw_symbol`), `scrollbar.zig`
+(v/h). Panel header close/minimize buttons and window scrollbars are now
+re-enabled (the deferred Phase-3 pieces). Pattern: pure low-level `do*`/`draw*`
+module + thin `Context` methods that allocate a slot via `widget()`.
+Remaining: `selectable`, `knob`, `property`, `edit` + `text_editor`, `combo`,
+`contextual`, `menu`, `tooltip`, `tree`, `chart`, `popup`, `table`,
+`list_view`, `color_picker`, image/9slice widgets, `group` (sub-windows), and
+the window resize scaler.
+
+CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
+docs deploy; `zig build docs` emits the autodoc site.
 
 **Phase 5 — Font**
 `rect_pack.zig` (idiomatic Zig port of stb_rect_pack). `stb_truetype.h` kept as C,
