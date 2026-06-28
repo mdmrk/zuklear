@@ -98,6 +98,37 @@ pub const CollapseState = enum { minimized, maximized };
 /// Tree node visual style (`nk_tree_type`).
 pub const TreeType = enum { node, tab };
 
+/// Chart plot style (`nk_chart_type`).
+pub const ChartType = enum { lines, column };
+
+/// Result of pushing a chart data point (`nk_chart_event`).
+pub const ChartEvent = struct { hovering: bool = false, clicked: bool = false };
+
+const chart_max_slot = 4;
+
+const ChartSlot = struct {
+    type: ChartType = .lines,
+    color: Color = .{},
+    highlight: Color = .{},
+    min: f32 = 0,
+    max: f32 = 0,
+    range: f32 = 0,
+    count: i32 = 0,
+    last: Vec2 = .{},
+    index: i32 = 0,
+    show_markers: bool = false,
+};
+
+/// Per-panel chart state (`nk_chart`).
+pub const Chart = struct {
+    slot: i32 = 0,
+    x: f32 = 0,
+    y: f32 = 0,
+    w: f32 = 0,
+    h: f32 = 0,
+    slots: [chart_max_slot]ChartSlot = [_]ChartSlot{.{}} ** chart_max_slot,
+};
+
 pub const WidgetLayoutState = widget_mod.LayoutState;
 
 /// Window option flags (`enum nk_window_flags`). Bits 0..10 are public options,
@@ -212,6 +243,7 @@ pub const Panel = struct {
     has_scrolling: bool = false,
     clip: Rect = .{},
     row: RowLayout = .{},
+    chart: Chart = .{},
     buffer: *CommandBuffer = undefined,
     parent: ?*Panel = null,
     /// Panel-local scroll storage that `offset_x`/`offset_y` point at for groups
@@ -1206,6 +1238,172 @@ pub const Context = struct {
         return color_picker_widget.doColorPicker(&ctx.last_widget_state, &win.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
+    // --- chart ------------------------------------------------------------
+
+    /// Begin a chart with an explicit slot color (`nk_chart_begin_colored`).
+    /// Returns false (and you must not push/end) when not visible.
+    pub fn chartBeginColored(ctx: *Context, ctype: ChartType, col: Color, highlight: Color, count: i32, min_value: f32, max_value: f32) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        const chart = &win.layout.?.chart;
+        if (w.state == .invalid) {
+            chart.* = .{};
+            return false;
+        }
+        const s = &ctx.style.chart;
+        chart.* = .{
+            .x = w.bounds.x + s.padding.x,
+            .y = w.bounds.y + s.padding.y,
+            .w = @max(w.bounds.w - 2 * s.padding.x, 2 * s.padding.x),
+            .h = @max(w.bounds.h - 2 * s.padding.y, 2 * s.padding.y),
+        };
+        chart.slots[0] = .{
+            .type = ctype,
+            .count = count,
+            .color = col.factor(s.color_factor),
+            .highlight = highlight,
+            .min = @min(min_value, max_value),
+            .max = @max(min_value, max_value),
+            .range = @max(min_value, max_value) - @min(min_value, max_value),
+            .show_markers = s.show_markers,
+        };
+        chart.slot = 1;
+
+        const out = &win.buffer;
+        switch (s.background) {
+            .image => |img| try out.drawImage(w.bounds, img, Color.white.factor(s.color_factor)),
+            .nine_slice => |sl| try out.drawNineSlice(w.bounds, sl, Color.white.factor(s.color_factor)),
+            .color => |bgc| {
+                try out.fillRect(w.bounds, s.rounding, s.border_color.factor(s.color_factor));
+                try out.fillRect(w.bounds.shrink(s.border), s.rounding, bgc.factor(s.color_factor));
+            },
+        }
+        return true;
+    }
+
+    /// Begin a chart using the theme's chart colors (`nk_chart_begin`).
+    pub fn chartBegin(ctx: *Context, ctype: ChartType, count: i32, min_value: f32, max_value: f32) !bool {
+        return ctx.chartBeginColored(ctype, ctx.style.chart.color, ctx.style.chart.selected_color, count, min_value, max_value);
+    }
+
+    /// Add another data series (`nk_chart_add_slot_colored`).
+    pub fn chartAddSlotColored(ctx: *Context, ctype: ChartType, col: Color, highlight: Color, count: i32, min_value: f32, max_value: f32) void {
+        const chart = &ctx.current.?.layout.?.chart;
+        if (chart.slot >= chart_max_slot) return;
+        chart.slots[@intCast(chart.slot)] = .{
+            .type = ctype,
+            .count = count,
+            .color = col,
+            .highlight = highlight,
+            .min = @min(min_value, max_value),
+            .max = @max(min_value, max_value),
+            .range = @max(min_value, max_value) - @min(min_value, max_value),
+            .show_markers = ctx.style.chart.show_markers,
+        };
+        chart.slot += 1;
+    }
+
+    pub fn chartAddSlot(ctx: *Context, ctype: ChartType, count: i32, min_value: f32, max_value: f32) void {
+        ctx.chartAddSlotColored(ctype, ctx.style.chart.color, ctx.style.chart.selected_color, count, min_value, max_value);
+    }
+
+    /// Push a value into a chart series (`nk_chart_push_slot`).
+    pub fn chartPushSlot(ctx: *Context, value: f32, slot: usize) ChartEvent {
+        const chart = &ctx.current.?.layout.?.chart;
+        if (slot >= @as(usize, @intCast(chart.slot))) return .{};
+        return switch (chart.slots[slot].type) {
+            .lines => ctx.chartPushLine(chart, value, slot),
+            .column => ctx.chartPushColumn(chart, value, slot),
+        };
+    }
+
+    /// Push a value into the first chart series (`nk_chart_push`).
+    pub fn chartPush(ctx: *Context, value: f32) ChartEvent {
+        return ctx.chartPushSlot(value, 0);
+    }
+
+    fn chartPushLine(ctx: *Context, chart: *Chart, value: f32, slot: usize) ChartEvent {
+        const win = ctx.current.?;
+        const layout = win.layout.?;
+        const out = &win.buffer;
+        const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
+        const left = @intFromEnum(input_mod.Button.left);
+        const sl = &chart.slots[slot];
+        var ret = ChartEvent{};
+        const step = chart.w / @as(f32, @floatFromInt(sl.count));
+        const ratio = (value - sl.min) / (sl.max - sl.min);
+
+        if (sl.index == 0) {
+            sl.last = .{ .x = chart.x, .y = (chart.y + chart.h) - ratio * chart.h };
+            const bounds = Rect.init(sl.last.x - 2, sl.last.y - 2, 4, 4);
+            var col = sl.color;
+            if (!layout.flags.rom) if (in) |i| if (Rect.init(sl.last.x - 3, sl.last.y - 3, 6, 6).contains(i.mouse.pos)) {
+                if (i.isMouseHoveringRect(bounds)) ret.hovering = true;
+                if (i.mouse.buttons[left].down and i.mouse.buttons[left].clicked != 0) ret.clicked = true;
+                col = sl.highlight;
+            };
+            if (sl.show_markers) out.fillRect(bounds, 0, col) catch {};
+            sl.index += 1;
+            return ret;
+        }
+
+        var col = sl.color;
+        const cur = Vec2.init(chart.x + step * @as(f32, @floatFromInt(sl.index)), (chart.y + chart.h) - ratio * chart.h);
+        out.strokeLine(sl.last.x, sl.last.y, cur.x, cur.y, 1.0, col) catch {};
+        const bounds = Rect.init(cur.x - 3, cur.y - 3, 6, 6);
+        if (!layout.flags.rom) if (in) |i| if (i.isMouseHoveringRect(bounds)) {
+            ret.hovering = true;
+            if (!i.mouse.buttons[left].down and i.mouse.buttons[left].clicked != 0) ret.clicked = true;
+            col = sl.highlight;
+        };
+        if (sl.show_markers) out.fillRect(Rect.init(cur.x - 2, cur.y - 2, 4, 4), 0, col) catch {};
+        sl.last = cur;
+        sl.index += 1;
+        return ret;
+    }
+
+    fn chartPushColumn(ctx: *Context, chart: *Chart, value: f32, slot: usize) ChartEvent {
+        const win = ctx.current.?;
+        const layout = win.layout.?;
+        const out = &win.buffer;
+        const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
+        const left = @intFromEnum(input_mod.Button.left);
+        const sl = &chart.slots[slot];
+        var ret = ChartEvent{};
+        if (sl.index >= sl.count) return ret;
+
+        var item = Rect{};
+        if (sl.count != 0) {
+            const padding: f32 = @floatFromInt(sl.count - 1);
+            item.w = (chart.w - padding) / @as(f32, @floatFromInt(sl.count));
+        }
+        var col = sl.color;
+        item.h = chart.h * @abs(value / sl.range);
+        if (value >= 0) {
+            const r = (value + @abs(sl.min)) / @abs(sl.range);
+            item.y = (chart.y + chart.h) - chart.h * r;
+        } else {
+            const r = (value - sl.max) / sl.range;
+            item.y = chart.y + chart.h * @abs(r) - item.h;
+        }
+        const fi: f32 = @floatFromInt(sl.index);
+        item.x = chart.x + fi * item.w + fi;
+
+        if (!layout.flags.rom) if (in) |i| if (item.contains(i.mouse.pos)) {
+            ret.hovering = true;
+            if (!i.mouse.buttons[left].down and i.mouse.buttons[left].clicked != 0) ret.clicked = true;
+            col = sl.highlight;
+        };
+        out.fillRect(item, 0, col) catch {};
+        sl.index += 1;
+        return ret;
+    }
+
+    /// Finish a chart (`nk_chart_end`).
+    pub fn chartEnd(ctx: *Context) void {
+        ctx.current.?.layout.?.chart = .{};
+    }
+
     // --- tree -------------------------------------------------------------
 
     fn treeStateBase(ctx: *Context, ttype: TreeType, img: ?image_mod.Image, title: []const u8, state: *bool) !bool {
@@ -1532,6 +1730,26 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "line chart emits markers and lines" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    ctx.layoutRowDynamic(100, 1);
+    const ok = try ctx.chartBegin(.lines, 4, 0, 10);
+    try std.testing.expect(ok);
+    _ = ctx.chartPush(1);
+    _ = ctx.chartPush(5);
+    _ = ctx.chartPush(3);
+    _ = ctx.chartPush(8);
+    ctx.chartEnd();
+    ctx.end();
+    var lines: usize = 0;
+    for (ctx.windowCommands("w").?) |c| if (c == .line) {
+        lines += 1;
+    };
+    try std.testing.expect(lines >= 3); // 4 points -> 3 connecting lines
 }
 
 test "ratio row sizes columns proportionally" {
