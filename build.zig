@@ -12,12 +12,29 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Optional TTF font-baking module. It uses the vendored stb headers
+    // (compiled as C) and therefore links libc; the core `zuklear` module above
+    // stays pure Zig. Consumers opt in by importing `zuklear_font`.
+    const font_mod = b.addModule("zuklear_font", .{
+        .root_source_file = b.path("src/font/atlas.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{.{ .name = "zuklear", .module = mod }},
+    });
+    font_mod.addIncludePath(b.path("src/font"));
+    font_mod.addCSourceFile(.{ .file = b.path("src/font/stb.c") });
+
     // `zig build test` runs every `test` block reachable from the root module.
     const mod_tests = b.addTest(.{ .root_module = mod });
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
+    const font_tests = b.addTest(.{ .root_module = font_mod });
+    const run_font_tests = b.addRunArtifact(font_tests);
+
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&run_font_tests.step);
 
     // `zig build docs` generates the autodoc site into `zig-out/docs`.
     const docs_obj = b.addObject(.{ .name = "zuklear", .root_module = mod });

@@ -14,12 +14,15 @@ The GUI design, algorithms and behaviour are ported from Nuklear.
 
 ## stb (Sean Barrett, et al.)
 
-Vendored with Nuklear and used by the font phase:
+Vendored as C source under `src/font/` and compiled into the optional
+`zuklear_font` module for TTF baking:
 
-- `stb_rect_pack.h` — ported to idiomatic Zig (`src/font/rect_pack.zig`).
-- `stb_truetype.h` — kept as C and integrated via the build; wrapped by
-  `src/font/font.zig`.
+- `stb_rect_pack.h`, `stb_truetype.h` — used as C (impl in `src/font/stb.c`),
+  wrapped by `src/font/atlas.zig`.
 - License: MIT OR Public Domain
+
+`extra_font/ProggyClean.ttf` (vendored at `src/font/ProggyClean.ttf` for the
+bake test) is by Tristan Grimmer, released into the public domain.
 
 ## wio
 
