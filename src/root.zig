@@ -13,6 +13,9 @@ pub const Buffer = @import("Buffer.zig");
 pub const String = @import("String.zig");
 pub const command = @import("command.zig");
 pub const input = @import("input.zig");
+pub const font = @import("font.zig");
+pub const image = @import("image.zig");
+pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
 pub const Vec2 = math.Vec2;
@@ -31,6 +34,10 @@ pub const Input = input.Input;
 pub const Key = input.Key;
 pub const Button = input.Button;
 
+pub const UserFont = font.UserFont;
+pub const Image = image.Image;
+pub const NineSlice = image.NineSlice;
+
 test {
     // Pull in every module's tests.
     _ = math;
@@ -40,4 +47,7 @@ test {
     _ = String;
     _ = command;
     _ = input;
+    _ = font;
+    _ = image;
+    _ = @import("handle.zig");
 }

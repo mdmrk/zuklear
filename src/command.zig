@@ -14,11 +14,17 @@
 const std = @import("std");
 const math = @import("math.zig");
 const color = @import("color.zig");
+const font = @import("font.zig");
+const image = @import("image.zig");
+const Handle = @import("handle.zig").Handle;
 
 const Vec2 = math.Vec2;
 const Vec2i = math.Vec2i;
 const Rect = math.Rect;
 const Color = color.Color;
+const UserFont = font.UserFont;
+const Image = image.Image;
+const NineSlice = image.NineSlice;
 
 /// `(short)v`: truncate toward zero, clamped to the `i16` range.
 fn toShort(v: f32) i16 {
@@ -46,6 +52,22 @@ pub const FillTriangle = struct { a: Vec2i, b: Vec2i, c: Vec2i, color: Color };
 pub const PolyStroke = struct { color: Color, line_thickness: u16, points: []const Vec2i };
 /// Filled polygon (`points` owned by the buffer).
 pub const PolyFill = struct { color: Color, points: []const Vec2i };
+/// Text run; `string` is owned by the buffer and already clamped to `w`.
+pub const Text = struct {
+    x: i16,
+    y: i16,
+    w: u16,
+    h: u16,
+    height: f32,
+    background: Color,
+    foreground: Color,
+    font: *const UserFont,
+    string: []const u8,
+};
+pub const ImageDraw = struct { x: i16, y: i16, w: u16, h: u16, img: Image, col: Color };
+/// Renderer-defined draw callback (`nk_command_custom`).
+pub const CustomCallback = *const fn (canvas: ?*anyopaque, x: i16, y: i16, w: u16, h: u16, data: Handle) void;
+pub const Custom = struct { x: i16, y: i16, w: u16, h: u16, callback_data: Handle, callback: CustomCallback };
 
 /// One draw command (`nk_command` and its subtypes, minus the byte header).
 pub const Command = union(enum) {
@@ -64,6 +86,9 @@ pub const Command = union(enum) {
     polygon: PolyStroke,
     polygon_filled: PolyFill,
     polyline: PolyStroke,
+    text: Text,
+    image: ImageDraw,
+    custom: Custom,
 };
 
 /// Records draw commands for later consumption by a renderer
@@ -90,6 +115,7 @@ pub const CommandBuffer = struct {
         for (b.commands.items) |cmd| switch (cmd) {
             .polygon, .polyline => |p| b.allocator.free(p.points),
             .polygon_filled => |p| b.allocator.free(p.points),
+            .text => |t| b.allocator.free(t.string),
             else => {},
         };
     }
@@ -287,6 +313,101 @@ pub const CommandBuffer = struct {
         errdefer b.allocator.free(pts);
         try b.push(.{ .polyline = .{ .color = c, .line_thickness = toUShort(thickness), .points = pts } });
     }
+
+    fn rectClippedOut(b: *const CommandBuffer, r: Rect) bool {
+        return b.use_clipping and (b.clip.w == 0 or b.clip.h == 0 or !b.clip.intersects(r));
+    }
+
+    /// Draw `string` clipped/clamped to `r` using `f` (`nk_draw_text`). The
+    /// text is measured and truncated to fit `r.w`; the stored copy is owned by
+    /// the buffer.
+    pub fn drawText(b: *CommandBuffer, r: Rect, string: []const u8, f: *const UserFont, bg: Color, fg: Color) !void {
+        if (string.len == 0 or (bg.a == 0 and fg.a == 0)) return;
+        if (b.rectClippedOut(r)) return;
+
+        var text = string;
+        if (f.textWidth(text) > r.w) {
+            const c = font.textClamp(f, text, r.w, &.{});
+            text = text[0..c.len];
+        }
+        if (text.len == 0) return;
+
+        const owned = try b.allocator.dupe(u8, text);
+        errdefer b.allocator.free(owned);
+        try b.push(.{ .text = .{
+            .x = toShort(r.x),
+            .y = toShort(r.y),
+            .w = toUShort(r.w),
+            .h = toUShort(r.h),
+            .height = f.height,
+            .background = bg,
+            .foreground = fg,
+            .font = f,
+            .string = owned,
+        } });
+    }
+
+    /// Draw an image into `r` tinted by `col` (`nk_draw_image`).
+    pub fn drawImage(b: *CommandBuffer, r: Rect, img: Image, col: Color) !void {
+        if (b.rectClippedOut(r)) return;
+        try b.push(.{ .image = .{
+            .x = toShort(r.x),
+            .y = toShort(r.y),
+            .w = toUShort(r.w),
+            .h = toUShort(r.h),
+            .img = img,
+            .col = col,
+        } });
+    }
+
+    /// Draw a nine-slice image stretched over `r` (`nk_draw_nine_slice`): the
+    /// four corners keep their size, the edges stretch along one axis and the
+    /// centre stretches both.
+    pub fn drawNineSlice(b: *CommandBuffer, r: Rect, slc: NineSlice, col: Color) !void {
+        const rx: f32 = @floatFromInt(slc.img.region[0]);
+        const ry: f32 = @floatFromInt(slc.img.region[1]);
+        const rw: f32 = @floatFromInt(slc.img.region[2]);
+        const rh: f32 = @floatFromInt(slc.img.region[3]);
+        const l: f32 = @floatFromInt(slc.l);
+        const t: f32 = @floatFromInt(slc.t);
+        const rr: f32 = @floatFromInt(slc.r);
+        const bb: f32 = @floatFromInt(slc.b);
+
+        // Build a sub-image of the source texture for one slice and draw it.
+        const Local = struct {
+            fn part(buf: *CommandBuffer, base: Image, sx: f32, sy: f32, sw: f32, sh: f32, dst: Rect, c: Color) !void {
+                var img = base;
+                img.region = .{ toUShort(sx), toUShort(sy), toUShort(sw), toUShort(sh) };
+                try buf.drawImage(dst, img, c);
+            }
+        };
+
+        // rows: top (t), middle (rh-t-b), bottom (b); cols: left (l), mid, right (r)
+        try Local.part(b, slc.img, rx, ry, l, t, Rect.init(r.x, r.y, l, t), col);
+        try Local.part(b, slc.img, rx + l, ry, rw - l - rr, t, Rect.init(r.x + l, r.y, r.w - l - rr, t), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry, rr, t, Rect.init(r.x + r.w - rr, r.y, rr, t), col);
+
+        try Local.part(b, slc.img, rx, ry + t, l, rh - t - bb, Rect.init(r.x, r.y + t, l, r.h - t - bb), col);
+        try Local.part(b, slc.img, rx + l, ry + t, rw - l - rr, rh - t - bb, Rect.init(r.x + l, r.y + t, r.w - l - rr, r.h - t - bb), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry + t, rr, rh - t - bb, Rect.init(r.x + r.w - rr, r.y + t, rr, r.h - t - bb), col);
+
+        try Local.part(b, slc.img, rx, ry + rh - bb, l, bb, Rect.init(r.x, r.y + r.h - bb, l, bb), col);
+        try Local.part(b, slc.img, rx + l, ry + rh - bb, rw - l - rr, bb, Rect.init(r.x + l, r.y + r.h - bb, r.w - l - rr, bb), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry + rh - bb, rr, bb, Rect.init(r.x + r.w - rr, r.y + r.h - bb, rr, bb), col);
+    }
+
+    /// Record a renderer-defined custom draw callback (`nk_push_custom`).
+    pub fn pushCustom(b: *CommandBuffer, r: Rect, callback: CustomCallback, data: Handle) !void {
+        if (b.rectClippedOut(r)) return;
+        try b.push(.{ .custom = .{
+            .x = toShort(r.x),
+            .y = toShort(r.y),
+            .w = toUShort(r.w),
+            .h = toUShort(r.h),
+            .callback_data = data,
+            .callback = callback,
+        } });
+    }
 };
 
 test "records a filled rect with quantized geometry" {
@@ -319,6 +440,39 @@ test "clipping drops out-of-bounds shapes" {
     // scissor + the one inside rect.
     try std.testing.expectEqual(@as(usize, 2), b.items().len);
     try std.testing.expect(b.items()[0] == .scissor);
+}
+
+fn testWidth(_: Handle, _: f32, text: []const u8) f32 {
+    return @as(f32, @floatFromInt(text.len)) * 10.0;
+}
+
+test "drawText clamps to width and owns its copy" {
+    var b = CommandBuffer.init(std.testing.allocator);
+    defer b.deinit();
+    const f = UserFont{ .height = 12, .width = &testWidth };
+    // "hello" is 50px; a 25px-wide rect keeps a 3-char prefix.
+    try b.drawText(Rect.init(0, 0, 25, 14), "hello", &f, Color{}, Color.rgb(255, 255, 255));
+    const t = b.items()[0].text;
+    try std.testing.expectEqualStrings("hel", t.string);
+    try std.testing.expectEqual(@as(f32, 12), t.height);
+}
+
+test "drawText with fully transparent colors is dropped" {
+    var b = CommandBuffer.init(std.testing.allocator);
+    defer b.deinit();
+    const f = UserFont{ .height = 12, .width = &testWidth };
+    const transparent = Color{ .a = 0 };
+    try b.drawText(Rect.init(0, 0, 100, 14), "hi", &f, transparent, transparent);
+    try std.testing.expectEqual(@as(usize, 0), b.items().len);
+}
+
+test "drawImage records tinted image" {
+    var b = CommandBuffer.init(std.testing.allocator);
+    defer b.deinit();
+    try b.drawImage(Rect.init(1, 2, 3, 4), Image.fromId(9), Color.rgb(10, 20, 30));
+    const c = b.items()[0].image;
+    try std.testing.expectEqual(@as(i32, 9), c.img.handle.id);
+    try std.testing.expectEqual(@as(u16, 3), c.w);
 }
 
 test "polygon owns its points and reset frees them" {
