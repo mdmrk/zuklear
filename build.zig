@@ -18,4 +18,14 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_mod_tests.step);
+
+    // `zig build docs` generates the autodoc site into `zig-out/docs`.
+    const docs_obj = b.addObject(.{ .name = "zuklear", .root_module = mod });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs_obj.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Build and install the documentation");
+    docs_step.dependOn(&install_docs.step);
 }
