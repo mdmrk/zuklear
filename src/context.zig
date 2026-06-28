@@ -28,6 +28,7 @@ const text_widget = @import("text.zig");
 const widget_mod = @import("widget.zig");
 const button_widget = @import("button.zig");
 const toggle_widget = @import("toggle.zig");
+const slider_widget = @import("slider.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -810,6 +811,13 @@ pub const Context = struct {
         return if (state == .rom or state == .disabled or layout.flags.rom) null else &ctx.input;
     }
 
+    /// Mutable variant for widgets that update input state during interaction
+    /// (e.g. the slider rewrites the click position while dragging).
+    fn widgetInputMut(ctx: *Context, state: WidgetLayoutState) ?*Input {
+        const layout = ctx.current.?.layout.?;
+        return if (state == .rom or state == .disabled or layout.flags.rom) null else &ctx.input;
+    }
+
     /// A labelled checkbox; toggles `active` on click, returns whether it
     /// changed (`nk_checkbox_label`).
     pub fn checkboxLabel(ctx: *Context, lbl: []const u8, active: *bool) !bool {
@@ -828,6 +836,19 @@ pub const Context = struct {
         var a = active;
         _ = try toggle_widget.doToggle(&ctx.last_widget_state, &win.buffer, w.bounds, &a, lbl, .option, &ctx.style.option, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
         return a;
+    }
+
+    // --- slider -----------------------------------------------------------
+
+    /// A float slider; updates `value` and returns whether it changed
+    /// (`nk_slider_float`).
+    pub fn sliderFloat(ctx: *Context, min: f32, value: *f32, max: f32, step: f32) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const old = value.*;
+        value.* = try slider_widget.doSlider(&ctx.last_widget_state, &win.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputMut(w.state), ctx.style.font.?);
+        return value.* != old;
     }
 };
 
