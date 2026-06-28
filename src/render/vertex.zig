@@ -167,6 +167,57 @@ pub const DrawList = struct {
         }
     }
 
+    fn arcFill(dl: *DrawList, cx: f32, cy: f32, radius: f32, a0: f32, a1: f32, col: Color) !void {
+        const n = dl.cfg.circle_segments;
+        const u = dl.cfg.white_uv[0];
+        const v = dl.cfg.white_uv[1];
+        const c = rgba(col);
+        const center = try dl.vertex(cx, cy, u, v, c);
+        var prev: Index = undefined;
+        var i: u32 = 0;
+        while (i <= n) : (i += 1) {
+            const a = a0 + (a1 - a0) * (@as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(n)));
+            const cur = try dl.vertex(cx + @cos(a) * radius, cy + @sin(a) * radius, u, v, c);
+            if (i > 0) try dl.tri(center, prev, cur);
+            prev = cur;
+        }
+    }
+
+    fn arcStroke(dl: *DrawList, cx: f32, cy: f32, radius: f32, a0: f32, a1: f32, thickness: f32, col: Color) !void {
+        const n = dl.cfg.circle_segments;
+        var px: f32 = 0;
+        var py: f32 = 0;
+        var i: u32 = 0;
+        while (i <= n) : (i += 1) {
+            const a = a0 + (a1 - a0) * (@as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(n)));
+            const nx = cx + @cos(a) * radius;
+            const ny = cy + @sin(a) * radius;
+            if (i > 0) try dl.line(px, py, nx, ny, thickness, col);
+            px = nx;
+            py = ny;
+        }
+    }
+
+    fn curve(dl: *DrawList, p0: [2]f32, c0: [2]f32, c1: [2]f32, p1: [2]f32, thickness: f32, col: Color) !void {
+        const segs = 24;
+        var prev = p0;
+        var i: u32 = 1;
+        while (i <= segs) : (i += 1) {
+            const t = @as(f32, @floatFromInt(i)) / segs;
+            const it = 1 - t;
+            const w0 = it * it * it;
+            const w1 = 3 * it * it * t;
+            const w2 = 3 * it * t * t;
+            const w3 = t * t * t;
+            const cur = [2]f32{
+                w0 * p0[0] + w1 * c0[0] + w2 * c1[0] + w3 * p1[0],
+                w0 * p0[1] + w1 * c0[1] + w2 * c1[1] + w3 * p1[1],
+            };
+            try dl.line(prev[0], prev[1], cur[0], cur[1], thickness, col);
+            prev = cur;
+        }
+    }
+
     fn polyFill(dl: *DrawList, points: []const math.Vec2i, col: Color) !void {
         if (points.len < 3) return;
         const u = dl.cfg.white_uv[0];
@@ -228,7 +279,17 @@ pub const DrawList = struct {
                         try dl.line(@floatFromInt(c.points[i].x), @floatFromInt(c.points[i].y), @floatFromInt(c.points[i + 1].x), @floatFromInt(c.points[i + 1].y), @floatFromInt(c.line_thickness), c.color);
                 },
                 .text => |c| if (dl.cfg.text_hook) |h| try h(dl, c),
-                .curve, .arc, .arc_filled, .image, .custom => {}, // TODO
+                .arc_filled => |c| try dl.arcFill(@floatFromInt(c.cx), @floatFromInt(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], c.color),
+                .arc => |c| try dl.arcStroke(@floatFromInt(c.cx), @floatFromInt(c.cy), @floatFromInt(c.r), c.a[0], c.a[1], @floatFromInt(c.line_thickness), c.color),
+                .curve => |c| try dl.curve(
+                    .{ @floatFromInt(c.begin.x), @floatFromInt(c.begin.y) },
+                    .{ @floatFromInt(c.ctrl[0].x), @floatFromInt(c.ctrl[0].y) },
+                    .{ @floatFromInt(c.ctrl[1].x), @floatFromInt(c.ctrl[1].y) },
+                    .{ @floatFromInt(c.end.x), @floatFromInt(c.end.y) },
+                    @floatFromInt(c.line_thickness),
+                    c.color,
+                ),
+                .image, .custom => {}, // need an app-provided texture / callback
             }
         }
         try dl.flush(clip);
