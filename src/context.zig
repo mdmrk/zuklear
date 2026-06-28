@@ -1438,6 +1438,68 @@ pub const Context = struct {
         return events;
     }
 
+    // --- property (numeric field) -----------------------------------------
+
+    /// A labelled numeric field: drag the middle to change the value, or click
+    /// the −/+ buttons by `step`. Returns whether it changed (`nk_property_float`).
+    /// NOTE: click-to-type editing of the value is a TODO; drag + buttons work.
+    pub fn propertyFloat(ctx: *Context, name: []const u8, min: f32, value: *f32, max: f32, step: f32, inc_per_pixel: f32) !bool {
+        const win = ctx.current.?;
+        const s = &ctx.style.property;
+        const font = ctx.style.font.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const property = w.bounds;
+        const out = win.layout.?.buffer;
+        const in = ctx.widgetInputMut(w.state);
+        const old = value.*;
+
+        const hovered = if (in) |i| i.isMouseHoveringRect(property) else false;
+        switch (if (hovered) s.hover else s.normal) {
+            .color => |col| {
+                try out.fillRect(property, s.rounding, col);
+                try out.strokeRect(property, s.rounding, s.border, s.border_color);
+            },
+            .image => |img| try out.drawImage(property, img, Color.white),
+            .nine_slice => |sl| try out.drawNineSlice(property, sl, Color.white),
+        }
+
+        const bh = font.height;
+        const left = Rect{ .x = property.x + s.border + s.padding.x, .y = property.y + s.border + property.h / 2 - bh / 2, .w = bh, .h = bh };
+        const right = Rect{ .x = property.x + property.w - (bh + s.padding.x), .y = left.y, .w = bh, .h = bh };
+        var ws: widget_mod.States = .{};
+        if (try button_widget.doButtonSymbol(&ws, out, left, s.sym_left, .default, &s.dec_button, in, font)) value.* -= step;
+        if (try button_widget.doButtonSymbol(&ws, out, right, s.sym_right, .default, &s.inc_button, in, font)) value.* += step;
+
+        const lw = font.textWidth(name);
+        const name_rect = Rect{ .x = left.x + left.w + s.padding.x, .y = property.y + s.border + s.padding.y, .w = lw + 2 * s.padding.x, .h = property.h - 2 * (s.border + s.padding.y) };
+        try text_widget.widgetText(out, name_rect, name, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+
+        var nbuf: [64]u8 = undefined;
+        const vstr = std.fmt.bufPrint(&nbuf, "{d:.2}", .{value.*}) catch "?";
+        const vw = font.textWidth(vstr);
+        const edit = Rect{ .x = right.x - (vw + 2 * s.padding.x), .y = property.y + s.border, .w = vw + 2 * s.padding.x, .h = property.h - 2 * s.border };
+        try text_widget.widgetText(out, edit, vstr, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+
+        const drag = Rect{ .x = name_rect.x + name_rect.w, .y = property.y, .w = edit.x - (name_rect.x + name_rect.w), .h = property.h };
+        if (in) |i| {
+            if (i.mouse.buttons[@intFromEnum(input_mod.Button.left)].down and i.hasMouseClickDownInRect(.left, drag, true)) {
+                value.* += i.mouse.delta.x * inc_per_pixel;
+            }
+        }
+
+        value.* = std.math.clamp(value.*, min, max);
+        return value.* != old;
+    }
+
+    /// Integer property; see `propertyFloat` (`nk_property_int`).
+    pub fn propertyInt(ctx: *Context, name: []const u8, min: i32, value: *i32, max: i32, step: i32, inc_per_pixel: f32) !bool {
+        var f: f32 = @floatFromInt(value.*);
+        const changed = try ctx.propertyFloat(name, @floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step), inc_per_pixel);
+        value.* = @intFromFloat(@round(f));
+        return changed;
+    }
+
     // --- chart ------------------------------------------------------------
 
     /// Begin a chart with an explicit slot color (`nk_chart_begin_colored`).
@@ -2173,6 +2235,21 @@ test "edit field activates on click and accepts typed text" {
     ctx.end();
     try std.testing.expectEqualStrings("hi", editor.text());
     ctx.clear();
+}
+
+test "property inc/dec buttons change the value" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    // click on the far-right inc button
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 175, .y = 16 };
+    ctx.input.button(.left, 175, 16, true);
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(25, 1);
+    var v: f32 = 5;
+    _ = try ctx.propertyFloat("X", 0, &v, 10, 1, 0.5);
+    ctx.end();
+    try std.testing.expectEqual(@as(f32, 6), v);
 }
 
 test "line chart emits markers and lines" {
