@@ -13,6 +13,7 @@ const input_mod = @import("input.zig");
 const font_mod = @import("font.zig");
 const widget = @import("widget.zig");
 const text_widget = @import("text.zig");
+const symbol_mod = @import("symbol.zig");
 
 const Rect = math.Rect;
 const Vec2 = math.Vec2;
@@ -20,6 +21,7 @@ const Color = color.Color;
 const StyleButton = style_mod.StyleButton;
 const StyleItem = style_mod.StyleItem;
 const Align = style_mod.Align;
+const Symbol = style_mod.Symbol;
 const CommandBuffer = command.CommandBuffer;
 const Input = input_mod.Input;
 const UserFont = font_mod.UserFont;
@@ -111,6 +113,32 @@ pub fn doButtonText(state: *States, out: *CommandBuffer, bounds: Rect, string: [
     const r = doButton(state, bounds, style, in, b);
     if (style.draw_begin) |cb| cb(out, style.userdata);
     try drawButtonText(out, bounds, r.content, state.*, style, string, text_alignment, font);
+    if (style.draw_end) |cb| cb(out, style.userdata);
+    return r.clicked;
+}
+
+fn drawButtonSymbol(out: *CommandBuffer, bounds: Rect, content: Rect, state: States, style: *const StyleButton, sym: Symbol, font: *const UserFont) !void {
+    const bg = try drawButton(out, bounds, state, style);
+    const sym_bg = switch (bg) {
+        .color => |col| col,
+        else => style.text_background,
+    };
+    var fg = if (state.hover)
+        style.text_hover
+    else if (state.actived)
+        style.text_active
+    else
+        style.text_normal;
+    fg = fg.factor(style.color_factor_text);
+    try symbol_mod.drawSymbol(out, sym, content, sym_bg, fg, style.border, font);
+}
+
+/// Draw a symbol button and report whether it was clicked
+/// (`nk_do_button_symbol`).
+pub fn doButtonSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Symbol, b: ButtonBehavior, style: *const StyleButton, in: ?*const Input, font: *const UserFont) !bool {
+    const r = doButton(state, bounds, style, in, b);
+    if (style.draw_begin) |cb| cb(out, style.userdata);
+    try drawButtonSymbol(out, bounds, r.content, state.*, style, sym, font);
     if (style.draw_end) |cb| cb(out, style.userdata);
     return r.clicked;
 }

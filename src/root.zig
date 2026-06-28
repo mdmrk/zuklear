@@ -20,6 +20,7 @@ pub const hash = @import("hash.zig");
 pub const context = @import("context.zig");
 pub const widget = @import("widget.zig");
 pub const text = @import("text.zig");
+pub const symbol = @import("symbol.zig");
 pub const button = @import("button.zig");
 pub const toggle = @import("toggle.zig");
 pub const slider = @import("slider.zig");
@@ -74,6 +75,7 @@ test {
     _ = context;
     _ = widget;
     _ = text;
+    _ = symbol;
     _ = button;
     _ = toggle;
     _ = slider;
