@@ -10,6 +10,7 @@ pub const math = @import("math.zig");
 pub const color = @import("color.zig");
 pub const utf8 = @import("utf8.zig");
 pub const Buffer = @import("Buffer.zig");
+pub const String = @import("String.zig");
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
 pub const Vec2 = math.Vec2;
@@ -27,4 +28,5 @@ test {
     _ = color;
     _ = utf8;
     _ = Buffer;
+    _ = String;
 }
