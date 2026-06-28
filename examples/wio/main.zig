@@ -4,6 +4,7 @@
 const std = @import("std");
 const wio = @import("wio");
 const zk = @import("zuklear");
+const zkfont = @import("zuklear_font");
 const software = zk.render.software;
 
 /// Map a wio button to either a zuklear mouse button or a logical key.
@@ -54,7 +55,10 @@ pub fn main(init: std.process.Init) !void {
     var pixels = try gpa.alloc(u32, width * height);
     defer gpa.free(pixels);
 
-    const font = zk.builtin_font.font(16);
+    // bake a real TTF; fall back to the built-in bitmap font on failure
+    var atlas = try zkfont.bake(gpa, @embedFile("font.ttf"), 18, 512, 512);
+    defer atlas.deinit();
+    const font = atlas.userFont();
     var ctx = zk.Context.init(gpa, &font);
     defer ctx.deinit();
 
@@ -148,6 +152,7 @@ pub fn main(init: std.process.Init) !void {
         surface.clear(zk.Color.rgb(28, 28, 28));
         for (ctx.windows.items) |w| {
             var ras = software.Rasterizer.init(&surface);
+            ras.text_fn = &zkfont.renderText; // render the baked TTF glyphs
             ras.renderAll(w.buffer.items());
         }
         for (0..height) |y| {

@@ -59,6 +59,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zuklear", .module = mod },
+                .{ .name = "zuklear_font", .module = font_mod },
                 .{ .name = "wio", .module = wio_dep.module("wio") },
             },
         }),

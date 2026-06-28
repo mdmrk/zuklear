@@ -100,6 +100,56 @@ pub const Atlas = struct {
     }
 };
 
+const software = zk.render.software;
+const Text = zk.command.Text;
+
+/// A `software.Rasterizer.text_fn` that alpha-blits baked glyphs. It recovers
+/// the `Atlas` from the text command's font userdata, so any baked `UserFont`
+/// works. Assign it to `rasterizer.text_fn`.
+pub fn renderText(r: *software.Rasterizer, cmd: Text) void {
+    const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
+    var pen_x: f32 = @floatFromInt(cmd.x);
+    // baseline: place the glyph row inside the command's box
+    const pen_y: f32 = @floatFromInt(cmd.y);
+    var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
+    while (it.nextCodepoint()) |cp| {
+        if (a.quad(cp, pen_x, pen_y + a.pixel_height)) |q| {
+            blitQuad(r, a, q, cmd.foreground);
+            pen_x += q.xadvance;
+        }
+    }
+}
+
+fn blitQuad(r: *software.Rasterizer, a: *const Atlas, q: Atlas.Quad, color: zk.Color) void {
+    const x0: i32 = @intFromFloat(@floor(q.x0));
+    const y0: i32 = @intFromFloat(@floor(q.y0));
+    const x1: i32 = @intFromFloat(@ceil(q.x1));
+    const y1: i32 = @intFromFloat(@ceil(q.y1));
+    const sx0 = q.u0 * @as(f32, @floatFromInt(a.width));
+    const sy0 = q.v0 * @as(f32, @floatFromInt(a.height));
+    const dw = @max(q.x1 - q.x0, 1);
+    const dh = @max(q.y1 - q.y0, 1);
+    const sw = (q.u1 - q.u0) * @as(f32, @floatFromInt(a.width));
+    const sh = (q.v1 - q.v0) * @as(f32, @floatFromInt(a.height));
+
+    var y = y0;
+    while (y < y1) : (y += 1) {
+        var x = x0;
+        while (x < x1) : (x += 1) {
+            const fx = (@as(f32, @floatFromInt(x)) + 0.5 - q.x0) / dw;
+            const fy = (@as(f32, @floatFromInt(y)) + 0.5 - q.y0) / dh;
+            const sxi: i32 = @intFromFloat(sx0 + fx * sw);
+            const syi: i32 = @intFromFloat(sy0 + fy * sh);
+            if (sxi < 0 or syi < 0 or sxi >= @as(i32, @intCast(a.width)) or syi >= @as(i32, @intCast(a.height))) continue;
+            const cov = a.bitmap[@as(usize, @intCast(syi)) * a.width + @as(usize, @intCast(sxi))];
+            if (cov == 0) continue;
+            var col = color;
+            col.a = @intCast((@as(u16, color.a) * cov) / 255);
+            r.plot(x, y, col);
+        }
+    }
+}
+
 /// Bake `ttf` at `pixel_height` into a `width`x`height` alpha atlas
 /// (`stbtt_PackFontRange`).
 pub fn bake(allocator: std.mem.Allocator, ttf: []const u8, pixel_height: f32, width: u32, height: u32) !Atlas {

@@ -56,9 +56,18 @@ pub const Rasterizer = struct {
     cy0: i32 = 0,
     cx1: i32,
     cy1: i32,
+    /// Optional text renderer (e.g. an `zuklear_font` atlas blitter). When null,
+    /// text is drawn with the built-in bitmap font.
+    text_fn: ?*const fn (*Rasterizer, command.Text) void = null,
 
     pub fn init(surface: *Surface) Rasterizer {
         return .{ .surface = surface, .cx1 = @intCast(surface.width), .cy1 = @intCast(surface.height) };
+    }
+
+    /// Plot one alpha-blended pixel, respecting the current clip. Public so an
+    /// external text renderer can draw glyphs.
+    pub fn plot(r: *Rasterizer, x: i32, y: i32, c: Color) void {
+        r.put(x, y, c);
     }
 
     fn put(r: *Rasterizer, x: i32, y: i32, c: Color) void {
@@ -241,7 +250,7 @@ pub const Rasterizer = struct {
                 while (i + 1 < c.points.len) : (i += 1)
                     r.line(c.points[i].x, c.points[i].y, c.points[i + 1].x, c.points[i + 1].y, c.line_thickness, c.color);
             },
-            .text => |c| r.drawText(c),
+            .text => |c| if (r.text_fn) |f| f(r, c) else r.drawText(c),
             .curve, .arc, .arc_filled, .image, .custom => {}, // TODO: curves/arcs/images
         }
     }
