@@ -77,12 +77,15 @@ Also landed the foundational `handle.zig` (`Handle`), `image.zig`
 (`Image`/`NineSlice`) and `font.zig` (`UserFont` interface + `textClamp`),
 which the draw layer depends on.
 
-**Phase 3 — Context, style, window, panel, layout** 🚧 in progress
-`style.zig` ✅ (all style structs + default dark theme; `StyleItem` tagged
-union, `Align` packed flags). `hash.zig` ✅ (MurmurHash3 for window/widget ids).
-Remaining: `context.zig`, `panel.zig`, `window.zig`, `layout.zig`, `group.zig`.
-These structs are mutually referential (context↔window↔panel) so they land
-together. Headless smoke tests (begin/layout/end).
+**Phase 3 — Context, style, window, panel, layout** 🚧 core landed
+`style.zig` ✅, `hash.zig` ✅, `context.zig` ✅ (window + panel + layout in one
+module: persistent windows with z-order list + name map + seq GC; begin/end;
+panel begin/end with header background+title, window background, border, clip;
+the row-layout engine `layoutRow*` + `widget` bounds allocation with the full
+row-type switch). Smoke-tested begin/layout/widget/end + window reuse/GC.
+Remaining in Phase 3: `group.zig` (sub-windows), public APIs for the other row
+layouts (ratio rows, `layoutSpace`, template), and the bits deferred until the
+widgets exist (header close/minimize buttons, scrollbars, resize scaler).
 
 Memory-model decisions for the idiomatic core (replacing Nuklear's
 pool/page/freelist machinery):
