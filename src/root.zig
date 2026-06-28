@@ -30,6 +30,10 @@ pub const selectable = @import("selectable.zig");
 pub const knob = @import("knob.zig");
 pub const color_picker = @import("color_picker.zig");
 pub const text_editor = @import("text_editor.zig");
+pub const builtin_font = @import("font/builtin.zig");
+pub const render = struct {
+    pub const software = @import("render/software.zig");
+};
 pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -90,5 +94,7 @@ test {
     _ = knob;
     _ = color_picker;
     _ = text_editor;
+    _ = builtin_font;
+    _ = render.software;
     _ = @import("handle.zig");
 }
