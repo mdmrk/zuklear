@@ -16,7 +16,6 @@ pub const input = @import("input.zig");
 pub const font = @import("font.zig");
 pub const image = @import("image.zig");
 pub const style = @import("style.zig");
-pub const hash = @import("hash.zig");
 pub const context = @import("context.zig");
 pub const widget = @import("widget.zig");
 pub const text = @import("text.zig");
@@ -81,7 +80,6 @@ test {
     _ = font;
     _ = image;
     _ = style;
-    _ = hash;
     _ = context;
     _ = widget;
     _ = text;

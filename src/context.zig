@@ -32,7 +32,6 @@ const slider_widget = @import("slider.zig");
 const progress_widget = @import("progress.zig");
 const scrollbar_widget = @import("scrollbar.zig");
 const selectable_widget = @import("selectable.zig");
-const hash_mod = @import("hash.zig");
 const image_mod = @import("image.zig");
 const knob_widget = @import("knob.zig");
 const color_picker_widget = @import("color_picker.zig");
@@ -1742,7 +1741,7 @@ pub const Context = struct {
     /// emit the contents, and call `treePop` (`nk_tree_push_hashed`).
     pub fn treePush(ctx: *Context, ttype: TreeType, title: []const u8, initial: CollapseState, seed: u32) !bool {
         const win = ctx.current.?;
-        const key = hash_mod.murmur(title, seed);
+        const key = std.hash.Murmur3_32.hashWithSeed(title, seed);
         var collapse = if (win.state.find(key, ctx.seq)) |v| v != 0 else (initial == .maximized);
         const open = try ctx.treeStateBase(ttype, null, title, &collapse);
         try win.state.set(ctx.allocator, key, @intFromBool(collapse), ctx.seq);
@@ -2026,7 +2025,7 @@ pub const Context = struct {
 
     fn menuBegin(ctx: *Context, win: *Window, id: []const u8, is_clicked: bool, header: Rect, size: Vec2) !bool {
         const body = Rect{ .x = header.x, .w = size.x, .y = header.y + header.h, .h = size.y };
-        const hash = hash_mod.murmur(id, @intFromEnum(PanelType.menu));
+        const hash = std.hash.Murmur3_32.hashWithSeed(id, @intFromEnum(PanelType.menu));
         const popup = win.popup.win;
         const is_open = popup != null;
         const is_active = popup != null and win.popup.name == hash and win.popup.type == .menu;
