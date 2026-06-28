@@ -330,6 +330,10 @@ pub const Context = struct {
     current: ?*Window = null,
     active: ?*Window = null,
 
+    /// The property currently being click-edited (0 = none) and its editor.
+    prop_active: u32 = 0,
+    prop_edit: ?text_editor.TextEdit = null,
+
     pub fn init(allocator: std.mem.Allocator, font: ?*const UserFont) Context {
         var s = Style.default();
         if (font) |f| s.font = f;
@@ -337,6 +341,7 @@ pub const Context = struct {
     }
 
     pub fn deinit(ctx: *Context) void {
+        if (ctx.prop_edit) |*pe| pe.deinit();
         for (ctx.windows.items) |w| ctx.destroyWindow(w);
         ctx.windows.deinit(ctx.allocator);
         ctx.lookup.deinit(ctx.allocator);
@@ -1451,9 +1456,13 @@ pub const Context = struct {
 
     // --- property (numeric field) -----------------------------------------
 
-    /// A labelled numeric field: drag the middle to change the value, or click
-    /// the −/+ buttons by `step`. Returns whether it changed (`nk_property_float`).
-    /// NOTE: click-to-type editing of the value is a TODO; drag + buttons work.
+    fn numberFilter(rune: u21) bool {
+        return (rune >= '0' and rune <= '9') or rune == '.' or rune == '-' or rune == '+' or rune == 'e' or rune == 'E';
+    }
+
+    /// A labelled numeric field: drag the middle to change the value by
+    /// `inc_per_pixel`, click the −/+ buttons by `step`, or click the value to
+    /// type it directly (`nk_property_float`). Returns whether it changed.
     pub fn propertyFloat(ctx: *Context, name: []const u8, min: f32, value: *f32, max: f32, step: f32, inc_per_pixel: f32) !bool {
         const win = ctx.current.?;
         const s = &ctx.style.property;
@@ -1465,8 +1474,11 @@ pub const Context = struct {
         const in = ctx.widgetInputMut(w.state);
         const old = value.*;
 
+        const id = std.hash.Murmur3_32.hashWithSeed(name, 0x70726f70); // 'prop'
+        var editing = ctx.prop_active == id;
+
         const hovered = if (in) |i| i.isMouseHoveringRect(property) else false;
-        switch (if (hovered) s.hover else s.normal) {
+        switch (if (editing or hovered) s.hover else s.normal) {
             .color => |col| {
                 try out.fillRect(property, s.rounding, col);
                 try out.strokeRect(property, s.rounding, s.border, s.border_color);
@@ -1486,20 +1498,65 @@ pub const Context = struct {
         const name_rect = Rect{ .x = left.x + left.w + s.padding.x, .y = property.y + s.border + s.padding.y, .w = lw + 2 * s.padding.x, .h = property.h - 2 * (s.border + s.padding.y) };
         try text_widget.widgetText(out, name_rect, name, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
 
-        var nbuf: [64]u8 = undefined;
-        const vstr = std.fmt.bufPrint(&nbuf, "{d:.2}", .{value.*}) catch "?";
-        const vw = font.textWidth(vstr);
-        const edit = Rect{ .x = right.x - (vw + 2 * s.padding.x), .y = property.y + s.border, .w = vw + 2 * s.padding.x, .h = property.h - 2 * s.border };
-        try text_widget.widgetText(out, edit, vstr, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+        const value_rect = Rect{ .x = name_rect.x + name_rect.w, .y = property.y + s.border, .w = right.x - (name_rect.x + name_rect.w), .h = property.h - 2 * s.border };
 
-        const drag = Rect{ .x = name_rect.x + name_rect.w, .y = property.y, .w = edit.x - (name_rect.x + name_rect.w), .h = property.h };
-        if (in) |i| {
-            if (i.mouse.buttons[@intFromEnum(input_mod.Button.left)].down and i.hasMouseClickDownInRect(.left, drag, true)) {
-                value.* += i.mouse.delta.x * inc_per_pixel;
+        // start editing on a click in the value area
+        if (!editing) {
+            if (in) |i| {
+                if (i.isMouseClickInRect(.left, value_rect)) {
+                    if (ctx.prop_edit) |*pe| pe.deinit();
+                    var pe = text_editor.TextEdit.init(ctx.allocator, 32) catch return value.* != old;
+                    pe.single_line = true;
+                    pe.active = true;
+                    pe.filter = &numberFilter;
+                    var nb: [64]u8 = undefined;
+                    pe.insert(std.fmt.bufPrint(&nb, "{d}", .{value.*}) catch "0") catch {};
+                    pe.selectAll();
+                    ctx.prop_edit = pe;
+                    ctx.prop_active = id;
+                    editing = true;
+                } else if (i.mouse.buttons[@intFromEnum(input_mod.Button.left)].down and i.hasMouseClickDownInRect(.left, value_rect, true)) {
+                    value.* += i.mouse.delta.x * inc_per_pixel; // drag
+                }
             }
         }
 
-        value.* = std.math.clamp(value.*, min, max);
+        if (editing) {
+            const pe = &ctx.prop_edit.?;
+            if (in) |i| {
+                const shift = i.isKeyDown(.shift);
+                inline for (std.meta.fields(input_mod.Key)) |f| {
+                    const k: input_mod.Key = @enumFromInt(f.value);
+                    if (k != .enter and k != .tab and i.isKeyPressed(k)) pe.key(k, shift);
+                }
+                if (i.keyboard.text_len > 0) {
+                    try pe.insert(i.text());
+                    i.keyboard.text_len = 0;
+                }
+                const click_away = i.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked != 0 and !property.contains(i.mouse.pos);
+                if (i.isKeyPressed(.enter) or click_away) {
+                    value.* = std.fmt.parseFloat(f32, std.mem.trim(u8, pe.text(), " ")) catch value.*;
+                    pe.deinit();
+                    ctx.prop_edit = null;
+                    ctx.prop_active = 0;
+                    editing = false;
+                }
+            }
+        }
+
+        // draw the editor text (while editing) or the formatted value
+        if (editing) {
+            const pe = &ctx.prop_edit.?;
+            const cx = font.textWidth(pe.text());
+            try text_widget.widgetText(out, value_rect, pe.text(), Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+            try out.fillRect(Rect.init(value_rect.x + cx, value_rect.y, 1, value_rect.h), 0, s.label_normal);
+        } else {
+            var nbuf: [64]u8 = undefined;
+            const vstr = std.fmt.bufPrint(&nbuf, "{d:.2}", .{value.*}) catch "?";
+            try text_widget.widgetText(out, value_rect, vstr, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+        }
+
+        if (!editing) value.* = std.math.clamp(value.*, min, max);
         return value.* != old;
     }
 
@@ -2346,6 +2403,35 @@ test "edit field activates on click and accepts typed text" {
     ctx.end();
     try std.testing.expectEqualStrings("hi", editor.text());
     ctx.clear();
+}
+
+test "property click-to-edit types a new value" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var v: f32 = 5;
+
+    // frame 1: click the value area to start editing
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 120, .y = 16 };
+    ctx.input.button(.left, 120, 16, true);
+    ctx.input.button(.left, 120, 16, false);
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(25, 1);
+    _ = try ctx.propertyFloat("X", 0, &v, 100, 1, 0.5);
+    ctx.end();
+    try std.testing.expect(ctx.prop_active != 0);
+    ctx.clear();
+
+    // frame 2: type "9" (replaces the selected "5") and press enter to commit
+    ctx.input.begin();
+    ctx.input.char('9');
+    ctx.input.key(.enter, true);
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    ctx.layoutRowDynamic(25, 1);
+    _ = try ctx.propertyFloat("X", 0, &v, 100, 1, 0.5);
+    ctx.end();
+    try std.testing.expectEqual(@as(f32, 9), v);
+    try std.testing.expect(ctx.prop_active == 0); // committed, no longer editing
 }
 
 test "property inc/dec buttons change the value" {
