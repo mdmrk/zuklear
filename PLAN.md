@@ -135,10 +135,15 @@ docs deploy; `zig build docs` emits the autodoc site.
 integrated through `build.zig` and wrapped by `font.zig` (atlas baking). Also port
 the user-font interface so apps can supply their own font.
 
-**Phase 6 — Vertex / draw list** — not needed for the software path
-`vertex.zig` (convert `Command` buffer → vertex/index buffers) would be for a
-hardware (GL/Vulkan) renderer; the software rasterizer consumes commands
-directly, so this is deferred until a HW backend is wanted.
+**Phase 6 — Vertex / draw list + GL backend** ✅ done
+`render/vertex.zig` triangulates the `Command` list into interleaved vertices
+(pos/uv/rgba) + u32 indices + per-clip draw batches (the `nk_convert`
+equivalent); solids sample a white texel so one textured shader covers shapes
+and text. `examples/wio/gl.zig` is a fixed-function OpenGL 1.1 renderer (loads
+GL via wio, uploads the atlas as an RGBA texture, draws with `glScissor`), and
+`examples/wio/gl_main.zig` is the GL demo (`zig build run-example-gl`).
+`zuklear_font.drawListText` provides the text geometry. A modern GLSL/Vulkan
+backend would reuse `render/vertex.zig` unchanged.
 
 **Phase 7 — wio renderer** ✅ done (software path)
 `render/software.zig` rasterizes the `Command` list to an RGB pixel surface

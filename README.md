@@ -11,9 +11,9 @@ unions and flag structs.
 ## Build
 
 ```sh
-zig build test         # run the test suite
-zig build example      # build the wio software-rendered demo (zig-out/bin)
-zig build run-example  # build and run the demo
+zig build test            # run the test suite
+zig build run-example     # software-rendered wio demo
+zig build run-example-gl  # OpenGL-rendered wio demo
 ```
 
 Requires Zig `0.16.0`. The demo depends on [wio](https://github.com/ypsvlq/wio)
