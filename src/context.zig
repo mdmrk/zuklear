@@ -31,6 +31,7 @@ const toggle_widget = @import("toggle.zig");
 const slider_widget = @import("slider.zig");
 const progress_widget = @import("progress.zig");
 const scrollbar_widget = @import("scrollbar.zig");
+const selectable_widget = @import("selectable.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -945,6 +946,17 @@ pub const Context = struct {
         const old = cur.*;
         cur.* = try progress_widget.doProgress(&ctx.last_widget_state, &win.buffer, w.bounds, cur.*, max, modifiable, &ctx.style.progress, ctx.widgetInputMut(w.state));
         return cur.* != old;
+    }
+
+    // --- selectable -------------------------------------------------------
+
+    /// A toggleable labelled row; updates `value`, returns whether it changed
+    /// (`nk_selectable_label`).
+    pub fn selectableLabel(ctx: *Context, str: []const u8, alignment: Align, value: *bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return selectable_widget.doSelectable(&ctx.last_widget_state, &win.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
     }
 };
 
