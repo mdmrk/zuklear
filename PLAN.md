@@ -69,9 +69,13 @@ Sequencing refinements made during the port:
   (memcpy/memset/strlen/dtoa/ftoa/strtof…) is covered by Zig's `std`. Only
   helpers without a std equivalent get ported, when a consumer needs them.
 
-**Phase 2 — Command buffer, draw, input**
-`command.zig` (`Command` union + `CommandBuffer`), `draw.zig` (stroke/fill
-primitives → commands), `input.zig` (mouse/keyboard state + query helpers).
+**Phase 2 — Command buffer, draw, input** ✅ done
+`command.zig` ✅ (`Command` union + `CommandBuffer` with every draw primitive —
+shapes, text, image, nine-slice, custom; points/text are owned slices freed on
+reset), `input.zig` ✅ (self-contained `Input` with feed + query methods).
+Also landed the foundational `handle.zig` (`Handle`), `image.zig`
+(`Image`/`NineSlice`) and `font.zig` (`UserFont` interface + `textClamp`),
+which the draw layer depends on.
 
 **Phase 3 — Context, style, window, panel, layout**
 `context.zig`, `style.zig` (default theme), `panel.zig`, `window.zig`,
