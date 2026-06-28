@@ -2,9 +2,9 @@
 //! stb_textedit). This is a functional editor covering insertion, deletion,
 //! cursor movement, selection, word motion and clipboard cut/copy/paste.
 //!
-//! Deferred (TODO, marked below): the undo/redo stack and multi-line
-//! pixel-coordinate row layout (vertical click positioning). Single-line
-//! editing — the common text field — is fully supported.
+//! Supports insertion, deletion, cursor/word motion, selection, clipboard and a
+//! full undo/redo history. Deferred (TODO): multi-line pixel-coordinate row
+//! layout (vertical click positioning); single-line editing is complete.
 
 const std = @import("std");
 const unicode = std.unicode;
@@ -30,13 +30,83 @@ pub const TextEdit = struct {
     /// Horizontal pixel scroll so the cursor stays visible in a single-line edit.
     scroll_x: f32 = 0,
 
+    allocator: std.mem.Allocator = undefined,
+    undo_stack: std.ArrayListUnmanaged(UndoRecord) = .empty,
+    redo_stack: std.ArrayListUnmanaged(UndoRecord) = .empty,
+
+    /// One reversible edit: at glyph `where`, `removed` bytes were replaced by
+    /// `inserted` bytes (either may be empty for a pure insert/delete).
+    const UndoRecord = struct { where: usize, removed: []u8, inserted: []u8 };
+    const max_undo = 256;
+
     pub fn init(allocator: std.mem.Allocator, size: usize) !TextEdit {
-        return .{ .string = try String.init(allocator, size) };
+        return .{ .string = try String.init(allocator, size), .allocator = allocator };
     }
 
     pub fn deinit(e: *TextEdit) void {
+        for (e.undo_stack.items) |r| e.freeRecord(r);
+        for (e.redo_stack.items) |r| e.freeRecord(r);
+        e.undo_stack.deinit(e.allocator);
+        e.redo_stack.deinit(e.allocator);
         e.string.deinit();
         e.* = undefined;
+    }
+
+    fn freeRecord(e: *TextEdit, rec: UndoRecord) void {
+        e.allocator.free(rec.removed);
+        e.allocator.free(rec.inserted);
+    }
+
+    fn clearRedo(e: *TextEdit) void {
+        for (e.redo_stack.items) |r| e.freeRecord(r);
+        e.redo_stack.clearRetainingCapacity();
+    }
+
+    /// Record a reversible edit and start a fresh redo branch.
+    fn pushUndo(e: *TextEdit, where: usize, removed: []const u8, inserted: []const u8) void {
+        e.clearRedo();
+        const rem = e.allocator.dupe(u8, removed) catch return;
+        const ins = e.allocator.dupe(u8, inserted) catch {
+            e.allocator.free(rem);
+            return;
+        };
+        e.undo_stack.append(e.allocator, .{ .where = where, .removed = rem, .inserted = ins }) catch {
+            e.allocator.free(rem);
+            e.allocator.free(ins);
+            return;
+        };
+        if (e.undo_stack.items.len > max_undo) e.freeRecord(e.undo_stack.orderedRemove(0));
+    }
+
+    /// Undo the last edit (`nk_textedit_undo`).
+    pub fn undo(e: *TextEdit) void {
+        const rec = if (e.undo_stack.items.len > 0) e.undo_stack.pop().? else return;
+        const ins_glyphs = std.unicode.utf8CountCodepoints(rec.inserted) catch 0;
+        if (ins_glyphs > 0) e.string.deleteRunes(rec.where, ins_glyphs);
+        if (rec.removed.len > 0) e.string.insertAtRune(rec.where, rec.removed) catch {};
+        e.cursor = rec.where + (std.unicode.utf8CountCodepoints(rec.removed) catch 0);
+        e.select_start = e.cursor;
+        e.select_end = e.cursor;
+        e.redo_stack.append(e.allocator, rec) catch e.freeRecord(rec);
+    }
+
+    /// Redo the last undone edit (`nk_textedit_redo`).
+    pub fn redo(e: *TextEdit) void {
+        const rec = if (e.redo_stack.items.len > 0) e.redo_stack.pop().? else return;
+        const rem_glyphs = std.unicode.utf8CountCodepoints(rec.removed) catch 0;
+        if (rem_glyphs > 0) e.string.deleteRunes(rec.where, rem_glyphs);
+        if (rec.inserted.len > 0) e.string.insertAtRune(rec.where, rec.inserted) catch {};
+        e.cursor = rec.where + (std.unicode.utf8CountCodepoints(rec.inserted) catch 0);
+        e.select_start = e.cursor;
+        e.select_end = e.cursor;
+        e.undo_stack.append(e.allocator, rec) catch e.freeRecord(rec);
+    }
+
+    /// Insert `bytes` at glyph `where`, recording the edit for undo.
+    fn insertRunes(e: *TextEdit, where: usize, bytes: []const u8) !void {
+        try e.string.insertAtRune(where, bytes);
+        e.pushUndo(where, "", bytes);
+        e.has_preferred_x = false;
     }
 
     pub fn hasSelection(e: *const TextEdit) bool {
@@ -53,6 +123,10 @@ pub const TextEdit = struct {
         e.select_start = 0;
         e.select_end = 0;
         e.has_preferred_x = false;
+        for (e.undo_stack.items) |r| e.freeRecord(r);
+        for (e.redo_stack.items) |r| e.freeRecord(r);
+        e.undo_stack.clearRetainingCapacity();
+        e.redo_stack.clearRetainingCapacity();
     }
 
     /// The edited text (`nk_str_get`).
@@ -76,7 +150,9 @@ pub const TextEdit = struct {
     }
 
     fn deleteRunes(e: *TextEdit, where: usize, count: usize) void {
-        // TODO: record undo here.
+        if (e.string.atRune(where)) |a| {
+            if (e.string.atRune(where + count)) |b| e.pushUndo(where, e.string.bytes()[a.offset..b.offset], "");
+        }
         e.string.deleteRunes(where, count);
         e.has_preferred_x = false;
     }
@@ -160,12 +236,12 @@ pub const TextEdit = struct {
                 (e.filter == null or e.filter.?(rune));
             if (allowed) {
                 if (!e.hasSelection() and e.mode == .replace and e.cursor < e.len()) {
-                    e.string.deleteRunes(e.cursor, 1);
-                    try e.string.insertAtRune(e.cursor, glyph);
+                    e.deleteRunes(e.cursor, 1);
+                    try e.insertRunes(e.cursor, glyph);
                     e.cursor += 1;
                 } else {
                     e.deleteSelection();
-                    try e.string.insertAtRune(e.cursor, glyph);
+                    try e.insertRunes(e.cursor, glyph);
                     e.cursor = @min(e.cursor + 1, e.len());
                 }
                 e.has_preferred_x = false;
@@ -182,6 +258,8 @@ pub const TextEdit = struct {
 
         switch (k) {
             .text_select_all => e.selectAll(),
+            .text_undo => e.undo(),
+            .text_redo => e.redo(),
             .text_insert_mode => e.mode = .insert,
             .text_replace_mode => e.mode = .replace,
             .text_reset_mode => e.mode = .view,
@@ -281,7 +359,7 @@ pub const TextEdit = struct {
     pub fn paste(e: *TextEdit, paste_text: []const u8) !void {
         e.clamp();
         e.deleteSelection();
-        try e.string.insertAtRune(e.cursor, paste_text);
+        try e.insertRunes(e.cursor, paste_text);
         e.cursor += unicode.utf8CountCodepoints(paste_text) catch 0;
         e.has_preferred_x = false;
     }
@@ -346,6 +424,28 @@ test "shift+left extends selection, then delete" {
     try std.testing.expectEqualStrings("lo", e.selection());
     e.key(.backspace, false);
     try std.testing.expectEqualStrings("hel", e.text());
+}
+
+test "undo and redo typing and selection delete" {
+    var e = try TextEdit.init(std.testing.allocator, 32);
+    defer e.deinit();
+    e.single_line = true;
+
+    try e.insert("abc"); // three recorded inserts
+    e.key(.text_undo, false);
+    try std.testing.expectEqualStrings("ab", e.text());
+    e.key(.text_undo, false);
+    try std.testing.expectEqualStrings("a", e.text());
+    e.key(.text_redo, false);
+    try std.testing.expectEqualStrings("ab", e.text());
+
+    // selecting all and deleting is one record that undo restores
+    e.key(.text_redo, false); // back to "abc"
+    e.selectAll();
+    e.key(.backspace, false);
+    try std.testing.expectEqualStrings("", e.text());
+    e.key(.text_undo, false);
+    try std.testing.expectEqualStrings("abc", e.text());
 }
 
 test "single line ignores newline" {
