@@ -2,9 +2,10 @@
 //! stb_textedit). This is a functional editor covering insertion, deletion,
 //! cursor movement, selection, word motion and clipboard cut/copy/paste.
 //!
-//! Supports insertion, deletion, cursor/word motion, selection, clipboard and a
-//! full undo/redo history. Deferred (TODO): multi-line pixel-coordinate row
-//! layout (vertical click positioning); single-line editing is complete.
+//! Supports insertion, deletion, cursor/word/line motion, selection, clipboard
+//! and a full undo/redo history. Pixel layout (drawing, click-to-position,
+//! scrolling) lives in the edit widget (`Context.editBuffer`), which has the
+//! font.
 
 const std = @import("std");
 const unicode = std.unicode;
@@ -301,8 +302,8 @@ pub const TextEdit = struct {
         }
     }
 
-    /// Process an editor key (`nk_textedit_key`). Up/Down behave as Left/Right
-    /// in single-line mode; multi-line vertical motion is TODO.
+    /// Process an editor key (`nk_textedit_key`). In single-line mode Up/Down
+    /// behave as Left/Right; in multi-line mode they move by line.
     pub fn key(e: *TextEdit, key_in: Key, shift: bool) void {
         var k = key_in;
         if (e.single_line and k == .up) k = .left;

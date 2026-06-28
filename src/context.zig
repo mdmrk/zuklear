@@ -1350,6 +1350,13 @@ pub const Context = struct {
         if (in) |i| {
             if (i.mouse.buttons[left].clicked != 0 and i.mouse.buttons[left].down) {
                 editor.active = bounds.contains(i.mouse.pos);
+                // place the cursor at the click position
+                if (editor.active and area.contains(i.mouse.pos) and !(flags.auto_select and !prev_active)) {
+                    const g = ctx.editLocate(area, editor, i.mouse.pos, flags);
+                    editor.cursor = g;
+                    editor.select_start = g;
+                    editor.select_end = g;
+                }
             }
         }
         if (!prev_active and editor.active) {
@@ -1461,6 +1468,50 @@ pub const Context = struct {
 
         try out.pushScissor(old_clip);
         return events;
+    }
+
+    /// Glyph index nearest a mouse position inside an edit field.
+    fn editLocate(ctx: *Context, area: Rect, editor: *text_editor.TextEdit, mouse: Vec2, flags: EditFlags) usize {
+        const font = ctx.style.font.?;
+        const bytes = editor.string.bytes();
+
+        // pick the target line (multiline) and its byte range + starting glyph
+        var line_bytes = bytes;
+        var base_glyph: usize = 0;
+        var line_origin_x = area.x - editor.scroll_x;
+        if (flags.multiline) {
+            const row_h = font.height + ctx.style.edit.row_padding;
+            const want: i32 = @intFromFloat(@max(0, (mouse.y - area.y + editor.scroll_y) / row_h));
+            line_origin_x = area.x;
+            var line_no: i32 = 0;
+            var start: usize = 0;
+            var idx: usize = 0;
+            while (idx < bytes.len) : (idx += 1) {
+                if (bytes[idx] == '\n') {
+                    if (line_no == want) break;
+                    line_no += 1;
+                    start = idx + 1;
+                    base_glyph += 1; // count the newline glyph
+                }
+            }
+            const line_end = std.mem.indexOfScalarPos(u8, bytes, start, '\n') orelse bytes.len;
+            line_bytes = bytes[start..line_end];
+            // base_glyph currently counts newlines passed; add glyphs of prior lines
+            base_glyph = std.unicode.utf8CountCodepoints(bytes[0..start]) catch 0;
+        }
+
+        // within the line, find the glyph whose midpoint passes the cursor x
+        const target_x = mouse.x - line_origin_x;
+        var x: f32 = 0;
+        var col: usize = 0;
+        var it = std.unicode.Utf8Iterator{ .bytes = line_bytes, .i = 0 };
+        while (it.nextCodepointSlice()) |slice| {
+            const gw = font.textWidth(slice);
+            if (target_x < x + gw / 2) break;
+            x += gw;
+            col += 1;
+        }
+        return base_glyph + col;
     }
 
     fn editDrawMultiline(ctx: *Context, out: *command.CommandBuffer, area: Rect, editor: *text_editor.TextEdit, bytes: []const u8, cursor_byte: usize, text_bg: Color, text_color: Color, wstate: widget_mod.States, flags: EditFlags) !void {
@@ -2401,6 +2452,27 @@ test "multiline edit renders lines and a cursor" {
         texts += 1;
     };
     try std.testing.expect(texts >= 2);
+}
+
+test "clicking in an edit field positions the cursor" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 64);
+    defer editor.deinit();
+    editor.active = true;
+    editor.single_line = true;
+    try editor.insert("hello"); // 7px/glyph mock font -> 35px wide
+
+    // click near x=22 (≈ between glyph 3 and 4) inside the field
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 22, .y = 17 };
+    ctx.input.button(.left, 22, 17, true);
+    _ = try ctx.begin("w", Rect.init(0, 0, 120, 60), .{});
+    ctx.layoutRowDynamic(30, 1);
+    _ = try ctx.editBuffer(EditFlags.field, &editor);
+    ctx.end();
+    // cursor moved off the end (5) to somewhere in the middle
+    try std.testing.expect(editor.cursor > 0 and editor.cursor < 5);
 }
 
 test "edit scrolls horizontally to keep the cursor visible" {
