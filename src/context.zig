@@ -2021,6 +2021,45 @@ pub const Context = struct {
     pub fn comboEnd(ctx: *Context) void {
         ctx.contextualEnd();
     }
+
+    // --- menu -------------------------------------------------------------
+
+    fn menuBegin(ctx: *Context, win: *Window, id: []const u8, is_clicked: bool, header: Rect, size: Vec2) !bool {
+        const body = Rect{ .x = header.x, .w = size.x, .y = header.y + header.h, .h = size.y };
+        const hash = hash_mod.murmur(id, @intFromEnum(PanelType.menu));
+        const popup = win.popup.win;
+        const is_open = popup != null;
+        const is_active = popup != null and win.popup.name == hash and win.popup.type == .menu;
+        if ((is_clicked and is_open and !is_active) or (is_open and !is_active) or (!is_open and !is_active and !is_clicked)) return false;
+        if (!try ctx.nonblockBegin(.{ .no_scrollbar = true }, body, header, .menu)) return false;
+        win.popup.type = .menu;
+        win.popup.name = hash;
+        return true;
+    }
+
+    /// Begin a menu with a text-label header (e.g. a menubar entry). Returns
+    /// true when open — then emit `menuItemLabel`s and call `menuEnd`
+    /// (`nk_menu_begin_label`).
+    pub fn menuBeginLabel(ctx: *Context, lbl: []const u8, alignment: Align, size: Vec2) !bool {
+        const win = ctx.current.?;
+        const s = &ctx.style;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const header = w.bounds;
+        const in = if (win.layout.?.flags.rom or w.state != .valid) null else &ctx.input;
+        const is_clicked = try button_widget.doButtonText(&ctx.last_widget_state, win.layout.?.buffer, header, lbl, alignment, .default, &s.menu_button, in, s.font.?);
+        return ctx.menuBegin(win, lbl, is_clicked, header, size);
+    }
+
+    /// A clickable menu entry; closes the menu on click (`nk_menu_item_label`).
+    pub fn menuItemLabel(ctx: *Context, lbl: []const u8, alignment: Align) !bool {
+        return ctx.comboItemLabel(lbl, alignment);
+    }
+
+    /// Close an open menu (`nk_menu_end`).
+    pub fn menuEnd(ctx: *Context) void {
+        ctx.contextualEnd();
+    }
 };
 
 // --- tests ---------------------------------------------------------------
