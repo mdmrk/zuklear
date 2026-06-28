@@ -15,6 +15,7 @@ pub const command = @import("command.zig");
 pub const input = @import("input.zig");
 pub const font = @import("font.zig");
 pub const image = @import("image.zig");
+pub const style = @import("style.zig");
 pub const Handle = @import("handle.zig").Handle;
 
 // Re-export the most-used geometry/numeric types at the top level for ergonomics.
@@ -38,6 +39,11 @@ pub const UserFont = font.UserFont;
 pub const Image = image.Image;
 pub const NineSlice = image.NineSlice;
 
+pub const Style = style.Style;
+pub const StyleItem = style.StyleItem;
+pub const Symbol = style.Symbol;
+pub const Align = style.Align;
+
 test {
     // Pull in every module's tests.
     _ = math;
@@ -49,5 +55,6 @@ test {
     _ = input;
     _ = font;
     _ = image;
+    _ = style;
     _ = @import("handle.zig");
 }
