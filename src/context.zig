@@ -35,6 +35,7 @@ const selectable_widget = @import("selectable.zig");
 const hash_mod = @import("hash.zig");
 const image_mod = @import("image.zig");
 const knob_widget = @import("knob.zig");
+const color_picker_widget = @import("color_picker.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -1192,6 +1193,17 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         return selectable_widget.doSelectable(&ctx.last_widget_state, &win.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
+    }
+
+    // --- color picker -----------------------------------------------------
+
+    /// A color picker (SV matrix + hue/alpha bars); updates `col`, returns
+    /// whether it changed (`nk_color_pick`).
+    pub fn colorPick(ctx: *Context, col: *color.Colorf, fmt: color_picker_widget.ColorFormat) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return color_picker_widget.doColorPicker(&ctx.last_widget_state, &win.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
     // --- tree -------------------------------------------------------------
