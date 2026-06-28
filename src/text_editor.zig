@@ -27,6 +27,8 @@ pub const TextEdit = struct {
     single_line: bool = false,
     active: bool = false,
     has_preferred_x: bool = false,
+    /// Horizontal pixel scroll so the cursor stays visible in a single-line edit.
+    scroll_x: f32 = 0,
 
     pub fn init(allocator: std.mem.Allocator, size: usize) !TextEdit {
         return .{ .string = try String.init(allocator, size) };

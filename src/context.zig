@@ -1315,9 +1315,8 @@ pub const Context = struct {
     /// A text input field driven by a caller-owned `TextEdit`
     /// (`nk_edit_buffer`). Returns the frame's edit events.
     ///
-    /// NOTE: single-line editing is fully supported; horizontal scrolling for
-    /// over-long single-line text and multi-line layout are TODO (long text is
-    /// clipped to the field).
+    /// Single-line editing is fully supported, including horizontal scrolling to
+    /// keep the cursor visible. Multi-line layout (`EditFlags.multiline`) is TODO.
     pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
@@ -1413,6 +1412,15 @@ pub const Context = struct {
 
         const bytes = editor.string.bytes();
 
+        // keep the cursor visible by scrolling the text horizontally
+        const cursor_x = font.textWidth(bytes[0..(editor.string.atRune(editor.cursor).?.offset)]);
+        if (editor.active) {
+            if (cursor_x < editor.scroll_x) editor.scroll_x = cursor_x;
+            if (cursor_x > editor.scroll_x + area.w - s.cursor_size) editor.scroll_x = cursor_x - area.w + s.cursor_size;
+        }
+        editor.scroll_x = @max(0, editor.scroll_x);
+        const ox = area.x - editor.scroll_x;
+
         // selection highlight
         if (editor.hasSelection()) {
             var a = editor.select_start;
@@ -1424,17 +1432,17 @@ pub const Context = struct {
             }
             const ax = font.textWidth(bytes[0..(editor.string.atRune(a).?.offset)]);
             const bx = font.textWidth(bytes[0..(editor.string.atRune(b).?.offset)]);
-            try out.fillRect(Rect.init(area.x + ax, area.y, bx - ax, area.h), 0, s.selected_normal);
+            try out.fillRect(Rect.init(ox + ax, area.y, bx - ax, area.h), 0, s.selected_normal);
         }
 
-        // text
-        try text_widget.widgetText(out, area, bytes, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
+        // text (drawn at the scrolled origin; the scissor clips it to the field)
+        const text_rect = Rect{ .x = ox, .y = area.y, .w = font.textWidth(bytes) + s.cursor_size, .h = area.h };
+        try text_widget.widgetText(out, text_rect, bytes, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
 
         // cursor
         if (editor.active and !flags.no_cursor and !editor.hasSelection()) {
-            const cx = font.textWidth(bytes[0..(editor.string.atRune(editor.cursor).?.offset)]);
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
-            try out.fillRect(Rect.init(area.x + cx, area.y, s.cursor_size, area.h), 0, cursor_color);
+            try out.fillRect(Rect.init(ox + cursor_x, area.y, s.cursor_size, area.h), 0, cursor_color);
         }
 
         try out.pushScissor(old_clip);
@@ -2266,6 +2274,23 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "edit scrolls horizontally to keep the cursor visible" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
+    defer editor.deinit();
+    editor.active = true;
+    editor.single_line = true;
+    try editor.insert("a long line of text that does not fit in the field");
+
+    _ = try ctx.begin("w", Rect.init(0, 0, 120, 60), .{});
+    ctx.layoutRowDynamic(30, 1);
+    _ = try ctx.editBuffer(EditFlags.field, &editor);
+    ctx.end();
+    // cursor is at the end, far past the field width, so the text scrolled
+    try std.testing.expect(editor.scroll_x > 0);
 }
 
 test "combo opens a popup on click and lays out items" {
