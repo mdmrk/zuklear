@@ -45,6 +45,9 @@ pub const Color = struct {
     b: u8 = 0,
     a: u8 = 255,
 
+    pub const white: Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
+    pub const black: Color = .{ .r = 0, .g = 0, .b = 0, .a = 255 };
+
     /// Clamp integer channels to `0..255` (`nk_rgba`).
     pub fn rgba(r: i32, g: i32, b: i32, a: i32) Color {
         return .{ .r = clampByte(r), .g = clampByte(g), .b = clampByte(b), .a = clampByte(a) };
