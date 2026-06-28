@@ -25,6 +25,8 @@ const command = @import("command.zig");
 const input_mod = @import("input.zig");
 const font_mod = @import("font.zig");
 const text_widget = @import("text.zig");
+const widget_mod = @import("widget.zig");
+const button_widget = @import("button.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -41,7 +43,7 @@ pub const max_window_name = 64;
 /// Scroll offset stored per window (`nk_scroll`).
 pub const Scroll = struct { x: u32 = 0, y: u32 = 0 };
 
-pub const ButtonBehavior = enum { default, repeater };
+pub const ButtonBehavior = widget_mod.ButtonBehavior;
 
 /// Sub-panel kind; the bit values match Nuklear so the set-membership tests
 /// below work (`enum nk_panel_type`).
@@ -81,7 +83,7 @@ pub const RowLayoutType = enum {
 
 pub const LayoutFormat = enum { dynamic, static };
 
-pub const WidgetLayoutState = enum { invalid, valid, rom, disabled };
+pub const WidgetLayoutState = widget_mod.LayoutState;
 
 /// Window option flags (`enum nk_window_flags`). Bits 0..10 are public options,
 /// 11..16 are private/runtime state, matching upstream so the public/private
@@ -222,7 +224,7 @@ pub const Context = struct {
     allocator: std.mem.Allocator,
     input: Input = .{},
     style: Style,
-    last_widget_state: u32 = 0,
+    last_widget_state: widget_mod.States = .{},
     button_behavior: ButtonBehavior = .default,
     delta_time_seconds: f32 = 0,
     seq: u32 = 1,
@@ -257,7 +259,7 @@ pub const Context = struct {
     /// End-of-frame reset: garbage-collect windows not drawn this frame and
     /// advance the sequence counter (`nk_clear`).
     pub fn clear(ctx: *Context) void {
-        ctx.last_widget_state = 0;
+        ctx.last_widget_state = .{};
         var i: usize = 0;
         while (i < ctx.windows.items.len) {
             const w = ctx.windows.items[i];
@@ -772,6 +774,33 @@ pub const Context = struct {
     pub fn label(ctx: *Context, str: []const u8, alignment: Align) !void {
         try ctx.textColored(str, alignment, ctx.style.text.color);
     }
+
+    // --- button widgets ---------------------------------------------------
+
+    /// A text button using an explicit style (`nk_button_text_styled`).
+    pub fn buttonTextStyled(ctx: *Context, btn_style: *const style_mod.StyleButton, title: []const u8) !bool {
+        const win = ctx.current.?;
+        const layout = win.layout.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const in: ?*const Input = if (w.state == .rom or w.state == .disabled or layout.flags.rom) null else &ctx.input;
+        return button_widget.doButtonText(
+            &ctx.last_widget_state,
+            &win.buffer,
+            w.bounds,
+            title,
+            btn_style.text_alignment,
+            ctx.button_behavior,
+            btn_style,
+            in,
+            ctx.style.font.?,
+        );
+    }
+
+    /// A text button in the default style (`nk_button_label` / `nk_button_text`).
+    pub fn buttonLabel(ctx: *Context, title: []const u8) !bool {
+        return ctx.buttonTextStyled(&ctx.style.button, title);
+    }
 };
 
 // --- tests ---------------------------------------------------------------
@@ -841,6 +870,22 @@ test "label emits a text command in the current row" {
         found = true;
     };
     try std.testing.expect(found);
+}
+
+test "button click is detected through the context" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    // place cursor and press inside where the button will be laid out
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 30, .y = 30 };
+    ctx.input.button(.left, 30, 30, true);
+
+    _ = try ctx.begin("win", Rect.init(0, 0, 200, 200), .{});
+    ctx.layoutRowDynamic(40, 1);
+    const clicked = try ctx.buttonLabel("press");
+    ctx.end();
+    try std.testing.expect(clicked);
 }
 
 test "hidden window reports not visible" {

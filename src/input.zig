@@ -191,6 +191,12 @@ pub const Input = struct {
         return r.contains(in.mouse.buttons[@intFromEnum(id)].clicked_pos);
     }
 
+    /// `nk_input_has_mouse_click_in_button_rect`: identical to
+    /// `hasMouseClickInRect` in the default (trigger-on-press) configuration.
+    pub fn hasMouseClickInButtonRect(in: *const Input, id: Button, r: Rect) bool {
+        return in.hasMouseClickInRect(id, r);
+    }
+
     pub fn hasMouseClickDownInRect(in: *const Input, id: Button, r: Rect, down: bool) bool {
         return in.hasMouseClickInRect(id, r) and in.mouse.buttons[@intFromEnum(id)].down == down;
     }
