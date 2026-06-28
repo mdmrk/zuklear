@@ -110,13 +110,15 @@ pool/page/freelist machinery):
 Done: `widget.zig` (shared LayoutState/ButtonBehavior/States), `text.zig`
 (label), `button.zig` (text + symbol button), `toggle.zig` (checkbox/radio),
 `slider.zig`, `progress.zig`, `symbol.zig` (`nk_draw_symbol`), `scrollbar.zig`
-(v/h). Panel header close/minimize buttons and window scrollbars are now
-re-enabled (the deferred Phase-3 pieces). Pattern: pure low-level `do*`/`draw*`
-module + thin `Context` methods that allocate a slot via `widget()`.
-Remaining: `selectable`, `knob`, `property`, `edit` + `text_editor`, `combo`,
-`contextual`, `menu`, `tooltip`, `tree`, `chart`, `popup`, `table`,
-`list_view`, `color_picker`, image/9slice widgets, `group` (sub-windows), and
-the window resize scaler.
+(v/h), `selectable.zig` (text), tree/tab nodes (in `context.zig`, exercises the
+`WidgetState` table). Panel header close/minimize buttons and window scrollbars
+are re-enabled (the deferred Phase-3 pieces). Pattern: pure low-level
+`do*`/`draw*` module + thin `Context` methods that allocate a slot via
+`widget()`.
+Remaining (harder, mostly need popups or the text editor): `knob`, `property`,
+`edit` + `text_editor` (undo/redo), `combo`, `contextual`, `menu`, `tooltip`,
+`chart`, `popup`, `group` (sub-windows), `table`, `list_view`, `color_picker`,
+image/9slice widgets, and the window resize scaler.
 
 CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
 docs deploy; `zig build docs` emits the autodoc site.
