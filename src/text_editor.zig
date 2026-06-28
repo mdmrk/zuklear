@@ -27,8 +27,9 @@ pub const TextEdit = struct {
     single_line: bool = false,
     active: bool = false,
     has_preferred_x: bool = false,
-    /// Horizontal pixel scroll so the cursor stays visible in a single-line edit.
+    /// Pixel scroll so the cursor stays visible (x: single-line, y: multi-line).
     scroll_x: f32 = 0,
+    scroll_y: f32 = 0,
 
     allocator: std.mem.Allocator = undefined,
     undo_stack: std.ArrayListUnmanaged(UndoRecord) = .empty,
@@ -218,6 +219,57 @@ pub const TextEdit = struct {
         return c;
     }
 
+    /// Glyph index of the start of the line containing `pos`.
+    fn lineStart(e: *TextEdit, pos: usize) usize {
+        var i = pos;
+        while (i > 0 and e.string.runeAt(i - 1) != '\n') i -= 1;
+        return i;
+    }
+
+    /// Glyph index of the end of the line containing `pos` (the next '\n' or the
+    /// end of the text).
+    fn lineEnd(e: *TextEdit, pos: usize) usize {
+        const n = e.len();
+        var i = pos;
+        while (i < n and e.string.runeAt(i) != '\n') i += 1;
+        return i;
+    }
+
+    /// Move the cursor up/down one line keeping the column (`nk_textedit_key`
+    /// up/down). Multi-line only; single-line maps up/down to left/right.
+    fn verticalMove(e: *TextEdit, up: bool, shift: bool) void {
+        const ls = e.lineStart(e.cursor);
+        const col = e.cursor - ls;
+        var target: usize = undefined;
+        if (up) {
+            if (ls == 0) {
+                target = 0;
+            } else {
+                const prev_start = e.lineStart(ls - 1);
+                const prev_len = (ls - 1) - prev_start;
+                target = prev_start + @min(col, prev_len);
+            }
+        } else {
+            const le = e.lineEnd(e.cursor);
+            if (le >= e.len()) {
+                target = e.len();
+            } else {
+                const next_start = le + 1;
+                const next_len = e.lineEnd(next_start) - next_start;
+                target = next_start + @min(col, next_len);
+            }
+        }
+        if (shift) {
+            if (!e.hasSelection()) e.prepSelection();
+            e.cursor = target;
+            e.select_end = target;
+        } else {
+            e.cursor = target;
+            e.select_start = target;
+            e.select_end = target;
+        }
+    }
+
     fn wordNext(e: *TextEdit) usize {
         const n = e.len();
         var c = e.cursor;
@@ -260,6 +312,8 @@ pub const TextEdit = struct {
             .text_select_all => e.selectAll(),
             .text_undo => e.undo(),
             .text_redo => e.redo(),
+            .up => e.verticalMove(true, shift), // single-line was remapped to .left above
+            .down => e.verticalMove(false, shift),
             .text_insert_mode => e.mode = .insert,
             .text_replace_mode => e.mode = .replace,
             .text_reset_mode => e.mode = .view,
@@ -446,6 +500,20 @@ test "undo and redo typing and selection delete" {
     try std.testing.expectEqualStrings("", e.text());
     e.key(.text_undo, false);
     try std.testing.expectEqualStrings("abc", e.text());
+}
+
+test "multi-line vertical cursor motion keeps the column" {
+    var e = try TextEdit.init(std.testing.allocator, 64);
+    defer e.deinit();
+    // single_line stays false -> multi-line
+    try e.insert("abcd\nef\nghij");
+    // cursor at end (after 'j'), column 4 on line 3
+    e.key(.up, false); // line 2 "ef" has length 2 -> clamp column to 2 (after 'f')
+    try std.testing.expectEqual(@as(usize, 7), e.cursor); // a b c d \n e f | -> index 7
+    e.key(.up, false); // line 1 "abcd" column 2 -> index 2
+    try std.testing.expectEqual(@as(usize, 2), e.cursor);
+    e.key(.down, false); // back to line 2 column 2
+    try std.testing.expectEqual(@as(usize, 7), e.cursor);
 }
 
 test "single line ignores newline" {

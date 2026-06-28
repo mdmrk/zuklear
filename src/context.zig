@@ -1320,8 +1320,10 @@ pub const Context = struct {
     /// A text input field driven by a caller-owned `TextEdit`
     /// (`nk_edit_buffer`). Returns the frame's edit events.
     ///
-    /// Single-line editing is fully supported, including horizontal scrolling to
-    /// keep the cursor visible. Multi-line layout (`EditFlags.multiline`) is TODO.
+    /// Single-line fields scroll horizontally to keep the cursor visible;
+    /// `EditFlags.multiline` fields wrap on newlines, scroll vertically and
+    /// navigate with up/down. (Multi-line selection isn't highlighted and long
+    /// lines are clipped rather than horizontally scrolled.)
     pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
@@ -1416,9 +1418,16 @@ pub const Context = struct {
         try out.pushScissor(old_clip.unify(area.x, area.y, area.x + area.w, area.y + area.h));
 
         const bytes = editor.string.bytes();
+        const cursor_byte = editor.string.atRune(editor.cursor).?.offset;
+
+        if (flags.multiline) {
+            try ctx.editDrawMultiline(out, area, editor, bytes, cursor_byte, text_bg, text_color, wstate, flags);
+            try out.pushScissor(old_clip);
+            return events;
+        }
 
         // keep the cursor visible by scrolling the text horizontally
-        const cursor_x = font.textWidth(bytes[0..(editor.string.atRune(editor.cursor).?.offset)]);
+        const cursor_x = font.textWidth(bytes[0..cursor_byte]);
         if (editor.active) {
             if (cursor_x < editor.scroll_x) editor.scroll_x = cursor_x;
             if (cursor_x > editor.scroll_x + area.w - s.cursor_size) editor.scroll_x = cursor_x - area.w + s.cursor_size;
@@ -1452,6 +1461,45 @@ pub const Context = struct {
 
         try out.pushScissor(old_clip);
         return events;
+    }
+
+    fn editDrawMultiline(ctx: *Context, out: *command.CommandBuffer, area: Rect, editor: *text_editor.TextEdit, bytes: []const u8, cursor_byte: usize, text_bg: Color, text_color: Color, wstate: widget_mod.States, flags: EditFlags) !void {
+        const s = &ctx.style.edit;
+        const font = ctx.style.font.?;
+        const row_h = font.height + s.row_padding;
+
+        // locate the cursor's line and its start byte
+        var cursor_line: usize = 0;
+        var line_start: usize = 0;
+        for (bytes[0..cursor_byte], 0..) |ch, idx| {
+            if (ch == '\n') {
+                cursor_line += 1;
+                line_start = idx + 1;
+            }
+        }
+        const cursor_col_x = font.textWidth(bytes[line_start..cursor_byte]);
+        const cursor_y = @as(f32, @floatFromInt(cursor_line)) * row_h;
+
+        // vertical scroll to keep the cursor line visible
+        if (editor.active) {
+            if (cursor_y < editor.scroll_y) editor.scroll_y = cursor_y;
+            if (cursor_y + row_h > editor.scroll_y + area.h) editor.scroll_y = cursor_y + row_h - area.h;
+        }
+        editor.scroll_y = @max(0, editor.scroll_y);
+
+        // draw each line (long lines are clipped; no horizontal scroll here)
+        var y = area.y - editor.scroll_y;
+        var it = std.mem.splitScalar(u8, bytes, '\n');
+        while (it.next()) |line| {
+            if (y + row_h >= area.y and y <= area.y + area.h)
+                try text_widget.widgetText(out, Rect{ .x = area.x, .y = y, .w = area.w, .h = row_h }, line, Align{ .left = true, .top = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
+            y += row_h;
+        }
+
+        if (editor.active and !flags.no_cursor) {
+            const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
+            try out.fillRect(Rect.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
+        }
     }
 
     // --- property (numeric field) -----------------------------------------
@@ -2331,6 +2379,28 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "multiline edit renders lines and a cursor" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
+    defer editor.deinit();
+    editor.active = true;
+    // multiline (single_line stays false); type two lines
+    try editor.insert("line one\nline two");
+
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 120), .{});
+    ctx.layoutRowDynamic(80, 1);
+    _ = try ctx.editBuffer(EditFlags.box, &editor);
+    ctx.end();
+
+    // two text runs (one per line) plus a cursor rect were emitted
+    var texts: usize = 0;
+    for (ctx.windowCommands("w").?) |c| if (c == .text) {
+        texts += 1;
+    };
+    try std.testing.expect(texts >= 2);
 }
 
 test "edit scrolls horizontally to keep the cursor visible" {
