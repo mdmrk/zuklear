@@ -27,6 +27,7 @@ const font_mod = @import("font.zig");
 const text_widget = @import("text.zig");
 const widget_mod = @import("widget.zig");
 const button_widget = @import("button.zig");
+const toggle_widget = @import("toggle.zig");
 
 const Vec2 = math.Vec2;
 const Rect = math.Rect;
@@ -800,6 +801,33 @@ pub const Context = struct {
     /// A text button in the default style (`nk_button_label` / `nk_button_text`).
     pub fn buttonLabel(ctx: *Context, title: []const u8) !bool {
         return ctx.buttonTextStyled(&ctx.style.button, title);
+    }
+
+    // --- toggle widgets ---------------------------------------------------
+
+    fn widgetInput(ctx: *Context, state: WidgetLayoutState) ?*const Input {
+        const layout = ctx.current.?.layout.?;
+        return if (state == .rom or state == .disabled or layout.flags.rom) null else &ctx.input;
+    }
+
+    /// A labelled checkbox; toggles `active` on click, returns whether it
+    /// changed (`nk_checkbox_label`).
+    pub fn checkboxLabel(ctx: *Context, lbl: []const u8, active: *bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return toggle_widget.doToggle(&ctx.last_widget_state, &win.buffer, w.bounds, active, lbl, .check, &ctx.style.checkbox, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
+    }
+
+    /// A labelled radio option; returns the new selected state
+    /// (`nk_option_label`).
+    pub fn optionLabel(ctx: *Context, lbl: []const u8, active: bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return active;
+        var a = active;
+        _ = try toggle_widget.doToggle(&ctx.last_widget_state, &win.buffer, w.bounds, &a, lbl, .option, &ctx.style.option, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
+        return a;
     }
 };
 
