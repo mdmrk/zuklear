@@ -283,6 +283,16 @@ pub const Panel = struct {
     scroll: Scroll = .{},
 };
 
+/// Non-blocking popup state held on the parent window (`nk_popup_state`).
+pub const PopupState = struct {
+    win: ?*Window = null,
+    type: PanelType = .none,
+    name: u32 = 0,
+    active: bool = false,
+    combo_count: u32 = 0,
+    header: Rect = .{},
+};
+
 /// A persistent window (`nk_window`). Created on first `begin`, reused across
 /// frames, GC'd by `clear` when no longer drawn.
 pub const Window = struct {
@@ -297,6 +307,8 @@ pub const Window = struct {
     scrolled: bool = false,
     widgets_disabled: bool = false,
     state: WidgetState = .{},
+    popup: PopupState = .{},
+    parent: ?*Window = null,
 };
 
 /// Hash seed Nuklear uses for window names (`NK_WINDOW_TITLE`).
@@ -331,6 +343,7 @@ pub const Context = struct {
     }
 
     fn destroyWindow(ctx: *Context, w: *Window) void {
+        if (w.popup.win) |p| ctx.destroyWindow(p);
         if (w.layout) |p| ctx.allocator.destroy(p);
         w.buffer.deinit();
         w.state.deinit(ctx.allocator);
@@ -351,6 +364,14 @@ pub const Context = struct {
                 _ = ctx.windows.orderedRemove(i);
                 ctx.destroyWindow(w);
             } else {
+                // free a popup window that was not shown this frame
+                if (w.popup.win) |p| {
+                    if (p.seq != ctx.seq) {
+                        ctx.destroyWindow(p);
+                        w.popup.win = null;
+                        w.popup.active = false;
+                    }
+                }
                 w.state.gc(ctx.allocator, ctx.seq);
                 i += 1;
             }
@@ -402,6 +423,7 @@ pub const Context = struct {
             return false;
         }
 
+        win.popup.combo_count = 0;
         win.buffer.reset(); // nk_start: fresh command buffer for the frame
 
         const panel = try ctx.allocator.create(Panel);
@@ -495,7 +517,7 @@ pub const Context = struct {
         const s = &ctx.style;
         const font = s.font.?;
         // Draw through the panel's buffer pointer (a sub-panel/group aliases the
-        // parent window's buffer), not `&win.buffer`.
+        // parent window's buffer), not `win.layout.?.buffer`.
         const out = layout.buffer;
 
         if (win.flags.hidden or win.flags.closed) {
@@ -800,7 +822,7 @@ pub const Context = struct {
             var background = win.bounds;
             background.y = layout.at_y - 1.0;
             background.h = layout.row.height + 1.0;
-            win.buffer.fillRect(background, 0, s.window.background) catch {};
+            layout.buffer.fillRect(background, 0, s.window.background) catch {};
         }
     }
 
@@ -1132,7 +1154,7 @@ pub const Context = struct {
         const s = &ctx.style;
         const bounds = ctx.panelAllocSpace();
         try text_widget.widgetText(
-            &win.buffer,
+            win.layout.?.buffer,
             bounds,
             str,
             alignment,
@@ -1159,7 +1181,7 @@ pub const Context = struct {
         const in: ?*const Input = if (w.state == .rom or w.state == .disabled or layout.flags.rom) null else &ctx.input;
         return button_widget.doButtonText(
             &ctx.last_widget_state,
-            &win.buffer,
+            win.layout.?.buffer,
             w.bounds,
             title,
             btn_style.text_alignment,
@@ -1195,7 +1217,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const w = ctx.widget();
         if (w.state == .invalid) return false;
-        return toggle_widget.doToggle(&ctx.last_widget_state, &win.buffer, w.bounds, active, lbl, .check, &ctx.style.checkbox, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
+        return toggle_widget.doToggle(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, active, lbl, .check, &ctx.style.checkbox, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
     }
 
     /// A labelled radio option; returns the new selected state
@@ -1205,7 +1227,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return active;
         var a = active;
-        _ = try toggle_widget.doToggle(&ctx.last_widget_state, &win.buffer, w.bounds, &a, lbl, .option, &ctx.style.option, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
+        _ = try toggle_widget.doToggle(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, &a, lbl, .option, &ctx.style.option, ctx.widgetInput(w.state), ctx.style.font.?, Align.text_left, Align.text_left);
         return a;
     }
 
@@ -1218,7 +1240,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = value.*;
-        value.* = try slider_widget.doSlider(&ctx.last_widget_state, &win.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputMut(w.state), ctx.style.font.?);
+        value.* = try slider_widget.doSlider(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputMut(w.state), ctx.style.font.?);
         return value.* != old;
     }
 
@@ -1231,7 +1253,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = cur.*;
-        cur.* = try progress_widget.doProgress(&ctx.last_widget_state, &win.buffer, w.bounds, cur.*, max, modifiable, &ctx.style.progress, ctx.widgetInputMut(w.state));
+        cur.* = try progress_widget.doProgress(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, cur.*, max, modifiable, &ctx.style.progress, ctx.widgetInputMut(w.state));
         return cur.* != old;
     }
 
@@ -1244,7 +1266,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = value.*;
-        value.* = try knob_widget.doKnob(&ctx.last_widget_state, &win.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_percent, &ctx.style.knob, ctx.widgetInputMut(w.state));
+        value.* = try knob_widget.doKnob(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_percent, &ctx.style.knob, ctx.widgetInputMut(w.state));
         return value.* != old;
     }
 
@@ -1256,7 +1278,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const w = ctx.widget();
         if (w.state == .invalid) return false;
-        return selectable_widget.doSelectable(&ctx.last_widget_state, &win.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
+        return selectable_widget.doSelectable(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
     // --- color picker -----------------------------------------------------
@@ -1267,7 +1289,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const w = ctx.widget();
         if (w.state == .invalid) return false;
-        return color_picker_widget.doColorPicker(&ctx.last_widget_state, &win.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
+        return color_picker_widget.doColorPicker(&ctx.last_widget_state, win.layout.?.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
     // --- edit (text input) ------------------------------------------------
@@ -1282,7 +1304,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
         const font = ctx.style.font.?;
-        const out = &win.buffer;
+        const out = win.layout.?.buffer;
         const left = @intFromEnum(input_mod.Button.left);
 
         const w = ctx.widget();
@@ -1432,7 +1454,7 @@ pub const Context = struct {
         };
         chart.slot = 1;
 
-        const out = &win.buffer;
+        const out = win.layout.?.buffer;
         switch (s.background) {
             .image => |img| try out.drawImage(w.bounds, img, Color.white.factor(s.color_factor)),
             .nine_slice => |sl| try out.drawNineSlice(w.bounds, sl, Color.white.factor(s.color_factor)),
@@ -1488,7 +1510,7 @@ pub const Context = struct {
     fn chartPushLine(ctx: *Context, chart: *Chart, value: f32, slot: usize) ChartEvent {
         const win = ctx.current.?;
         const layout = win.layout.?;
-        const out = &win.buffer;
+        const out = win.layout.?.buffer;
         const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
         const left = @intFromEnum(input_mod.Button.left);
         const sl = &chart.slots[slot];
@@ -1528,7 +1550,7 @@ pub const Context = struct {
     fn chartPushColumn(ctx: *Context, chart: *Chart, value: f32, slot: usize) ChartEvent {
         const win = ctx.current.?;
         const layout = win.layout.?;
-        const out = &win.buffer;
+        const out = win.layout.?.buffer;
         const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
         const left = @intFromEnum(input_mod.Button.left);
         const sl = &chart.slots[slot];
@@ -1573,7 +1595,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const layout = win.layout.?;
         const s = &ctx.style;
-        const out = &win.buffer;
+        const out = win.layout.?.buffer;
         const font = s.font.?;
         const item_spacing = s.window.spacing;
 
@@ -1734,6 +1756,194 @@ pub const Context = struct {
         win.layout = parent;
         ctx.allocator.destroy(g);
     }
+
+    // --- popups / combo ---------------------------------------------------
+
+    fn setParentRom(layout: ?*Panel, comptime field: enum { rom, remove_rom }) void {
+        var root = layout;
+        while (root) |r| {
+            switch (field) {
+                .rom => r.flags.rom = true,
+                .remove_rom => r.flags.remove_rom = true,
+            }
+            root = r.parent;
+        }
+    }
+
+    /// Open/refresh a non-blocking popup window (`nk_nonblock_begin`). The popup
+    /// renders as an overlay into the parent window's command buffer.
+    fn nonblockBegin(ctx: *Context, flags: WindowFlags, body: Rect, header: Rect, panel_type: PanelType) !bool {
+        const win = ctx.current.?;
+        var is_active = true;
+
+        if (win.popup.win == null) {
+            const p = try ctx.allocator.create(Window);
+            p.* = .{ .name = try ctx.allocator.dupe(u8, ""), .buffer = CommandBuffer.init(ctx.allocator), .parent = win };
+            win.popup.win = p;
+            win.popup.type = panel_type;
+        } else {
+            const pressed = ctx.input.isMousePressed(.left);
+            const in_body = ctx.input.isMouseHoveringRect(body);
+            const in_header = ctx.input.isMouseHoveringRect(header);
+            if (pressed and (!in_body or in_header)) is_active = false;
+        }
+        win.popup.header = header;
+
+        if (!is_active) {
+            setParentRom(win.layout, .remove_rom);
+            return false;
+        }
+
+        const popup = win.popup.win.?;
+        popup.bounds = body;
+        popup.parent = win;
+        popup.flags = flags;
+        popup.flags.border = true;
+        popup.flags.dynamic = true;
+        popup.seq = ctx.seq;
+        win.popup.active = true;
+
+        const panel = try ctx.allocator.create(Panel);
+        panel.* = .{ .buffer = &win.buffer, .offset_x = &popup.scrollbar.x, .offset_y = &popup.scrollbar.y };
+        popup.layout = panel;
+
+        win.buffer.pushScissor(math.null_rect) catch {};
+        ctx.current = popup;
+        _ = ctx.panelBegin("", panel_type);
+        panel.parent = win.layout;
+
+        setParentRom(win.layout, .rom);
+        return true;
+    }
+
+    fn popupClose(ctx: *Context) void {
+        const popup = ctx.current.?;
+        popup.flags.hidden = true;
+        if (popup.parent) |p| p.popup.active = false;
+    }
+
+    fn popupEnd(ctx: *Context) void {
+        const popup = ctx.current.?;
+        const win = popup.parent.?;
+        if (popup.flags.hidden) {
+            setParentRom(win.layout, .remove_rom);
+            win.popup.active = false;
+        }
+        ctx.panelEnd();
+        if (popup.layout) |l| ctx.allocator.destroy(l);
+        popup.layout = null;
+        ctx.current = win;
+        win.buffer.pushScissor(win.layout.?.clip) catch {};
+    }
+
+    fn contextualEnd(ctx: *Context) void {
+        const popup = ctx.current.?;
+        const panel = popup.layout.?;
+        if (panel.flags.dynamic) {
+            // close on the next frame if clicked in the empty space below content
+            var body = Rect{};
+            if (panel.at_y < panel.bounds.y + panel.bounds.h) {
+                const padding = panelGetPadding(&ctx.style, panel.type);
+                body = panel.bounds;
+                body.y = panel.at_y + panel.footer_height + panel.border + padding.y + panel.row.height;
+                body.h = (panel.bounds.y + panel.bounds.h) - body.y;
+            }
+            if (ctx.input.isMousePressed(.left) and ctx.input.isMouseHoveringRect(body)) {
+                popup.flags.hidden = true;
+            }
+        }
+        if (popup.flags.hidden) popup.seq = 0;
+        ctx.popupEnd();
+    }
+
+    fn comboBegin(ctx: *Context, win: *Window, size: Vec2, is_clicked: bool, header: Rect) !bool {
+        const popup = win.popup.win;
+        const body = Rect{
+            .x = header.x,
+            .w = size.x,
+            .y = header.y + header.h - ctx.style.window.combo_border,
+            .h = size.y,
+        };
+        const hash = win.popup.combo_count;
+        win.popup.combo_count += 1;
+        const is_open = popup != null;
+        const is_active = popup != null and win.popup.name == hash and win.popup.type == .combo;
+        if ((is_clicked and is_open and !is_active) or (is_open and !is_active) or (!is_open and !is_active and !is_clicked)) return false;
+        if (!try ctx.nonblockBegin(.{}, body, if (is_clicked and is_open) Rect{} else header, .combo)) return false;
+        win.popup.type = .combo;
+        win.popup.name = hash;
+        return true;
+    }
+
+    /// Begin a dropdown combo box showing `selected`; `size` is the dropdown
+    /// body size. Returns true when open — then emit `comboItemLabel`s and call
+    /// `comboEnd` (`nk_combo_begin_label`).
+    pub fn comboBeginLabel(ctx: *Context, selected: []const u8, size: Vec2) !bool {
+        const win = ctx.current.?;
+        const s = &ctx.style;
+        const font = s.font.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const header = w.bounds;
+        const in = if (win.layout.?.flags.rom or w.state == .disabled or w.state == .rom) null else &ctx.input;
+        const is_clicked = button_widget.behavior(&ctx.last_widget_state, header, in, .default);
+
+        const out = win.layout.?.buffer;
+        const st = ctx.last_widget_state;
+        const bg = if (st.actived) s.combo.active else if (st.hover) s.combo.hover else s.combo.normal;
+        const label_col = if (st.actived) s.combo.label_active else if (st.hover) s.combo.label_hover else s.combo.label_normal;
+        var text_bg: Color = .{ .a = 0 };
+        switch (bg) {
+            .image => |img| try out.drawImage(header, img, Color.white.factor(s.combo.color_factor)),
+            .nine_slice => |sl| try out.drawNineSlice(header, sl, Color.white.factor(s.combo.color_factor)),
+            .color => |col| {
+                text_bg = col;
+                try out.fillRect(header, s.combo.rounding, col.factor(s.combo.color_factor));
+                try out.strokeRect(header, s.combo.rounding, s.combo.border, s.combo.border_color.factor(s.combo.color_factor));
+            },
+        }
+
+        // dropdown arrow button
+        const btn = Rect{
+            .w = header.h - 2 * s.combo.button_padding.y,
+            .x = header.x + header.w - header.h - s.combo.button_padding.x,
+            .y = header.y + s.combo.button_padding.y,
+            .h = header.h - 2 * s.combo.button_padding.y,
+        };
+        const sym = if (st.actived) s.combo.sym_active else if (st.hover) s.combo.sym_hover else s.combo.sym_normal;
+        _ = button_widget.doButtonSymbol(&ctx.last_widget_state, out, btn, sym, .default, &s.combo.button, in, font) catch false;
+
+        // selected label
+        const label_rect = Rect{
+            .x = header.x + s.combo.content_padding.x,
+            .y = header.y + s.combo.content_padding.y,
+            .h = header.h - 2 * s.combo.content_padding.y,
+            .w = btn.x - (s.combo.content_padding.x + s.combo.spacing.x) - (header.x + s.combo.content_padding.x),
+        };
+        try text_widget.widgetText(out, label_rect, selected, Align.text_left, math.Vec2.init(0, 0), text_bg, label_col, font);
+
+        return ctx.comboBegin(win, size, is_clicked, header);
+    }
+
+    /// A selectable row inside an open combo/contextual popup; returns true and
+    /// closes the popup when clicked (`nk_combo_item_label`).
+    pub fn comboItemLabel(ctx: *Context, lbl: []const u8, alignment: Align) !bool {
+        const win = ctx.current.?; // the popup window
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const out = win.layout.?.buffer;
+        const in = if (w.state == .rom or win.layout.?.flags.rom) null else &ctx.input;
+        if (try button_widget.doButtonText(&ctx.last_widget_state, out, w.bounds, lbl, alignment, .default, &ctx.style.contextual_button, in, ctx.style.font.?)) {
+            ctx.popupClose();
+            return true;
+        }
+        return false;
+    }
+
+    /// Close an open combo box (`nk_combo_end`).
+    pub fn comboEnd(ctx: *Context) void {
+        ctx.contextualEnd();
+    }
 };
 
 // --- tests ---------------------------------------------------------------
@@ -1893,6 +2103,31 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "combo opens a popup on click and lays out items" {
+    var ctx = Context.init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    ctx.input.begin();
+    ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
+    ctx.input.button(.left, 20, 20, true); // click the combo header
+
+    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    ctx.layoutRowStatic(25, 180, 1);
+    const open = try ctx.comboBeginLabel("A", Vec2.init(180, 100));
+    try std.testing.expect(open);
+    if (open) {
+        ctx.layoutRowDynamic(20, 1);
+        _ = try ctx.comboItemLabel("Item 1", Align.text_left);
+        _ = try ctx.comboItemLabel("Item 2", Align.text_left);
+        ctx.comboEnd();
+    }
+    ctx.end();
+
+    // the popup window now exists on the parent
+    try std.testing.expect(ctx.lookup.get("w").?.popup.win != null);
+    ctx.clear();
 }
 
 test "edit field activates on click and accepts typed text" {
