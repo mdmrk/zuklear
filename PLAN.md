@@ -110,19 +110,22 @@ pool/page/freelist machinery):
   offsets.
 - **Config (style push/pop) stacks**: bounded arrays sized as upstream.
 
-**Phase 4 — Widgets** 🚧 in progress
-Done: `widget.zig` (shared LayoutState/ButtonBehavior/States), `text.zig`
-(label), `button.zig` (text + symbol button), `toggle.zig` (checkbox/radio),
-`slider.zig`, `progress.zig`, `symbol.zig` (`nk_draw_symbol`), `scrollbar.zig`
-(v/h), `selectable.zig` (text), tree/tab nodes (in `context.zig`, exercises the
-`WidgetState` table). Panel header close/minimize buttons and window scrollbars
-are re-enabled (the deferred Phase-3 pieces). Pattern: pure low-level
-`do*`/`draw*` module + thin `Context` methods that allocate a slot via
-`widget()`.
-Remaining (harder, mostly need popups or the text editor): `knob`, `property`,
-`edit` + `text_editor` (undo/redo), `combo`, `contextual`, `menu`, `tooltip`,
-`chart`, `popup`, `group` (sub-windows), `table`, `list_view`, `color_picker`,
-image/9slice widgets, and the window resize scaler.
+**Phase 4 — Widgets** ✅ substantially complete
+Done: text/label, button (text + symbol), checkbox/radio (`toggle`), `slider`,
+`progress`, `scrollbar` (v/h), `selectable` (text), tree/tab nodes, `group`
+(sub-windows), `knob`, `color_picker`, `chart` (line/column), `symbol`
+(`nk_draw_symbol`), `edit` + `text_editor` (single-line text input), `combo`
+(+ the non-blocking popup subsystem), `menu` (dropdowns), `image`, `property`
+(drag + step buttons). Panel header buttons + window scrollbars also re-enabled.
+Pattern: pure low-level `do*`/`draw*` module + thin `Context` methods that
+allocate a slot via `widget()`; popups are child windows overlaying the parent
+buffer (`Window.popup`, GC'd by seq).
+
+Remaining (minor; reuse existing foundations): `contextual` (right-click) and
+`tooltip` (reuse `nonblockBegin`), `list_view` (group-based), 9-slice and
+image/symbol selectable variants. Deferred sub-features: text-editor undo/redo
+and multi-line layout, click-to-type property edit, group scrollbars + scroll
+persistence, blocking `popup`.
 
 CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
 docs deploy; `zig build docs` emits the autodoc site.
