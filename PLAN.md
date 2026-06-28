@@ -148,9 +148,17 @@ without baking. `examples/wio/main.zig` is the working demo: wio window +
 input + framebuffer driving a full UI (`zig build example` / `run-example`).
 Curves/arcs/images in the rasterizer and a GL backend are TODO.
 
-**Phase 5 — Font baking** — optional, deferred
-The built-in bitmap font covers text; the stb-based atlas baker (`rect_pack`
-port + `stb_truetype` as C) remains a future enhancement for TTF fonts.
+**Phase 5 — Font baking** ✅ done (stb as C)
+Both `stb_rect_pack.h` and `stb_truetype.h` are vendored and compiled as C
+(`src/font/stb.c`); the optional `zuklear_font` module (`src/font/atlas.zig`)
+bakes a TTF into an alpha atlas via `stbtt_PackFontRange`, exposing glyph
+metrics, placement quads (UVs) and a `UserFont`. `zuklear_font.renderText`
+alpha-blits baked glyphs through the software rasterizer's `text_fn` hook, and
+the wio demo uses a baked DroidSans. The core `zuklear` module stays pure Zig;
+libc/stb live only in the opt-in `zuklear_font` module.
+
+(Note: the earlier "port rect_pack to Zig" decision was changed — both stb
+headers are used as C.)
 
 ## Commit policy
 
