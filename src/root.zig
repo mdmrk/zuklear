@@ -5,3 +5,17 @@
 //! `@import("zuklear")`. See `PLAN.md` for the porting roadmap.
 
 const std = @import("std");
+
+pub const math = @import("math.zig");
+
+// Re-export the most-used geometry/numeric types at the top level for ergonomics.
+pub const Vec2 = math.Vec2;
+pub const Vec2i = math.Vec2i;
+pub const Rect = math.Rect;
+pub const Recti = math.Recti;
+pub const Heading = math.Heading;
+
+test {
+    // Pull in every module's tests.
+    _ = math;
+}
