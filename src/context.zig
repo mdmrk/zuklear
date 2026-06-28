@@ -1257,6 +1257,21 @@ pub const Context = struct {
         return cur.* != old;
     }
 
+    // --- image ------------------------------------------------------------
+
+    /// Draw an image in the next layout slot, tinted by `col` (`nk_image_color`).
+    pub fn imageColor(ctx: *Context, img: image_mod.Image, col: Color) !void {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return;
+        try win.layout.?.buffer.drawImage(w.bounds, img, col);
+    }
+
+    /// Draw an image in the next layout slot (`nk_image`).
+    pub fn image(ctx: *Context, img: image_mod.Image) !void {
+        try ctx.imageColor(img, Color.white);
+    }
+
     // --- knob -------------------------------------------------------------
 
     /// A rotary knob; updates `value`, returns whether it changed
