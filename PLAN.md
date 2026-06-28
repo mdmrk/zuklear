@@ -77,9 +77,12 @@ Also landed the foundational `handle.zig` (`Handle`), `image.zig`
 (`Image`/`NineSlice`) and `font.zig` (`UserFont` interface + `textClamp`),
 which the draw layer depends on.
 
-**Phase 3 — Context, style, window, panel, layout**
-`context.zig`, `style.zig` (default theme), `panel.zig`, `window.zig`,
-`layout.zig`, `group.zig`. Headless smoke tests (begin/layout/end).
+**Phase 3 — Context, style, window, panel, layout** 🚧 in progress
+`style.zig` ✅ (all style structs + default dark theme; `StyleItem` tagged
+union, `Align` packed flags). Remaining: `context.zig`, `panel.zig`,
+`window.zig`, `layout.zig`, `group.zig`, plus the deferred `pool`/
+`page_element`. These structs are mutually referential (context↔window↔panel)
+so they land together. Headless smoke tests (begin/layout/end).
 
 **Phase 4 — Widgets**
 `widget.zig`, `text.zig`, `button.zig`, `toggle.zig`, `selectable.zig`,
