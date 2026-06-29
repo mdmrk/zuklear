@@ -1,13 +1,13 @@
-//! The same zuklear demo as the software example in `../wio_software/main.zig`,
-//! but rendered with OpenGL: each frame's command buffers are converted to a
-//! vertex draw list (`render.vertex`) and drawn by the fixed-function GL
-//! renderer in `gl.zig`. Run with `zig build run-example-gl`.
+//! The zuklear wio demo, rendered with OpenGL: each frame's command buffers are
+//! converted to a vertex draw list (`render.vertex`) and drawn by the
+//! fixed-function GL renderer in `gl.zig`. Run with `zig build run-example`.
 
 const std = @import("std");
 const wio = @import("wio");
 const zk = @import("zuklear");
 const zkfont = @import("zuklear_font");
 const glr = @import("gl.zig");
+const overview = @import("overview.zig");
 
 const Mapped = union(enum) { mouse: zk.Button, key: zk.Key, none };
 
@@ -71,17 +71,13 @@ pub fn main(init: std.process.Init) !void {
     var fb_w: i32 = 480;
     var fb_h: i32 = 520;
 
-    // demo state
-    var clicks: u32 = 0;
-    var checked = false;
-    var option: usize = 0;
-    var slider: f32 = 0.5;
-    var prop: f32 = 25;
-    var prog: usize = 40;
-    const items = [_][]const u8{ "Red", "Green", "Blue" };
-    var selected: usize = 0;
+    // demo state (Nuklear's overview `static` locals live here)
+    var st: overview.State = .{};
     var mouse_x: i32 = 0;
     var mouse_y: i32 = 0;
+    // vsync is on (swap interval 1), so frames pace at the display refresh; a
+    // fixed ~60 Hz delta drives time-based behavior like SCROLL_AUTO_HIDE.
+    ctx.delta_time_seconds = 1.0 / 60.0;
 
     while (true) {
         wio.update();
@@ -116,50 +112,15 @@ pub fn main(init: std.process.Init) !void {
         ctx.input.end();
         if (closed) break;
 
-        // --- build the UI -------------------------------------------------
-        if (try ctx.begin("Demo", .init(20, 20, 440, 480), .{
-            .border = true,
-            .title = true,
-            .movable = true,
-            .scalable = true,
-        })) {
-            ctx.layoutRowDynamic(0, 1);
-            try ctx.label("Rendered with OpenGL", .{ .left = true, .middle = true });
-
-            ctx.layoutRowDynamic(30, 1);
-            if (try ctx.buttonLabel("Click me")) clicks += 1;
-
-            var buf: [64]u8 = undefined;
-            ctx.layoutRowDynamic(0, 1);
-            try ctx.label(try std.fmt.bufPrint(&buf, "clicks: {d}", .{clicks}), .{ .left = true, .middle = true });
-
-            _ = try ctx.checkboxLabel("Enable feature", &checked);
-            if (try ctx.optionLabel("Option A", option == 0)) option = 0;
-            if (try ctx.optionLabel("Option B", option == 1)) option = 1;
-
-            ctx.layoutRowDynamic(24, 1);
-            _ = try ctx.sliderFloat(0, &slider, 1, 0.01);
-            _ = try ctx.progress(&prog, 100, true);
-            _ = try ctx.propertyFloat("Value", 0, &prop, 100, 1, 1);
-
-            ctx.layoutRowDynamic(28, 1);
-            if (try ctx.comboBeginLabel(items[selected], .init(400, 120))) {
-                ctx.layoutRowDynamic(25, 1);
-                for (items, 0..) |it, idx| {
-                    if (try ctx.comboItemLabel(it, .{ .left = true, .middle = true })) selected = idx;
-                }
-                ctx.comboEnd();
-            }
-        }
-        ctx.end();
+        // --- build the UI: the canonical Nuklear overview demo ------------
+        try overview.overview(&ctx, &st);
 
         // --- convert + draw ----------------------------------------------
         draw_list.reset();
         const cfg: zk.render.vertex.ConvertConfig = .{
             .white_uv = atlas.whiteUv(),
             .text_hook = &zkfont.drawListText,
-            // Match Nuklear's reference backends: both AA flags on
-            // (config.shape_AA = config.line_AA = NK_ANTI_ALIASING_ON).
+            // both AA flags on, as Nuklear's reference backends default
             .shape_aa = true,
             .line_aa = true,
         };
