@@ -43,6 +43,7 @@ const Gl = struct {
     Enable: *const fn (u32) callconv(.c) void,
     Disable: *const fn (u32) callconv(.c) void,
     BlendFunc: *const fn (u32, u32) callconv(.c) void,
+    ColorMask: *const fn (u8, u8, u8, u8) callconv(.c) void,
     MatrixMode: *const fn (u32) callconv(.c) void,
     LoadIdentity: *const fn () callconv(.c) void,
     Ortho: *const fn (f64, f64, f64, f64, f64, f64) callconv(.c) void,
@@ -98,6 +99,7 @@ pub const Renderer = struct {
 
     pub fn clear(r: *Renderer, fb_w: i32, fb_h: i32, c: zk.Color) void {
         r.gl.Viewport(0, 0, fb_w, fb_h);
+        r.gl.ColorMask(1, 1, 1, 1);
         r.gl.ClearColor(@as(f32, @floatFromInt(c.r)) / 255, @as(f32, @floatFromInt(c.g)) / 255, @as(f32, @floatFromInt(c.b)) / 255, 1);
         r.gl.Clear(COLOR_BUFFER_BIT);
     }
@@ -108,6 +110,7 @@ pub const Renderer = struct {
         const gl = &r.gl;
         gl.Enable(BLEND);
         gl.BlendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+        gl.ColorMask(1, 1, 1, 0);
         gl.Disable(CULL_FACE);
         gl.Disable(DEPTH_TEST);
         gl.Enable(SCISSOR_TEST);
