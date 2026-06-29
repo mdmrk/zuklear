@@ -735,7 +735,9 @@ pub const Context = struct {
             title_label.y = header.y + s.window.header.label_padding.y;
             title_label.h = font.height + 2 * s.window.header.label_padding.y;
             title_label.w = std.math.clamp(t + 2 * s.window.header.spacing.x, 0, header.x + header.w - title_label.x);
-            out.drawText(title_label, title, font, text_bg, text_color) catch {};
+            // `nk_widget_text` (NK_TEXT_LEFT = left|middle) so the title is
+            // vertically centered in the header strip, like Nuklear.
+            text_widget.widgetText(out, title_label, title, Align.text_left, .init(0, 0), text_bg, text_color, font) catch {};
         }
 
         // window background
@@ -842,6 +844,20 @@ pub const Context = struct {
                 win.scrollbar_hiding_timer = 0;
         } else win.scrollbar_hiding_timer = 0;
 
+        // window border (drawn before the scaler, matching `nk_panel_end`)
+        if (layout.flags.border) {
+            const border_color = panelGetBorderColor(s, layout.type);
+            const padding_y = if (layout.flags.minimized)
+                s.window.border + win.bounds.y + layout.header_height
+            else if (layout.flags.dynamic)
+                layout.bounds.y + layout.bounds.h + layout.footer_height
+            else
+                win.bounds.y + win.bounds.h;
+            var b = win.bounds;
+            b.h = padding_y - win.bounds.y;
+            out.strokeRect(b, s.window.rounding, layout.border, border_color) catch {};
+        }
+
         // window resize scaler (bottom-right grip)
         if (layout.flags.scalable and !layout.flags.minimized and !layout.flags.no_input) {
             var scaler: Rect = .{
@@ -890,19 +906,6 @@ pub const Context = struct {
                     in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.y = scaler.y + scaler.h / 2.0;
                 }
             }
-        }
-
-        if (layout.flags.border) {
-            const border_color = panelGetBorderColor(s, layout.type);
-            const padding_y = if (layout.flags.minimized)
-                s.window.border + win.bounds.y + layout.header_height
-            else if (layout.flags.dynamic)
-                layout.bounds.y + layout.bounds.h + layout.footer_height
-            else
-                win.bounds.y + win.bounds.h;
-            var b = win.bounds;
-            b.h = padding_y - win.bounds.y;
-            out.strokeRect(b, s.window.rounding, layout.border, border_color) catch {};
         }
 
         // a hidden window clears its command buffer for the frame
