@@ -98,6 +98,9 @@ pub const CollapseState = enum { minimized, maximized };
 /// Tree node visual style (`nk_tree_type`).
 pub const TreeType = enum { node, tab };
 
+/// Blocking-popup sizing mode (`enum nk_popup_type`).
+pub const PopupType = enum { static, dynamic };
+
 /// Text-edit option flags (`enum nk_edit_flags`).
 pub const EditFlags = packed struct(u32) {
     read_only: bool = false,
@@ -298,6 +301,11 @@ pub const PopupState = struct {
     name: u32 = 0,
     active: bool = false,
     combo_count: u32 = 0,
+    /// Contextual (right-click) tracking: per-frame count, previous-frame count
+    /// and the count of the currently open contextual (`nk_popup_state`).
+    con_count: u32 = 0,
+    con_old: u32 = 0,
+    active_con: u32 = 0,
     header: Rect = .{},
 };
 
@@ -474,6 +482,18 @@ pub const Context = struct {
             return;
         }
         ctx.panelEnd();
+
+        // contextual GC (`nk_panel_end`): drop the open contextual if the count
+        // of contextuals changed between frames, else carry the count forward.
+        if (win.popup.active_con != 0 and win.popup.con_old != win.popup.con_count) {
+            win.popup.con_count = 0;
+            win.popup.con_old = 0;
+            win.popup.active_con = 0;
+        } else {
+            win.popup.con_old = win.popup.con_count;
+            win.popup.con_count = 0;
+        }
+
         ctx.allocator.destroy(layout);
         win.layout = null;
         ctx.current = null;
@@ -1859,6 +1879,23 @@ pub const Context = struct {
         return win.flags.closed or win.flags.hidden;
     }
 
+    /// The bounds the next widget would occupy, without consuming the slot
+    /// (`nk_widget_bounds` / `nk_layout_peek`).
+    pub fn widgetBounds(ctx: *Context) Rect {
+        const layout = ctx.current.?.layout.?;
+        const y = layout.at_y;
+        const index = layout.row.index;
+        if (layout.row.index >= layout.row.columns) {
+            layout.at_y += layout.row.height;
+            layout.row.index = 0;
+        }
+        var bounds = ctx.layoutWidgetSpace(false);
+        if (layout.row.index == 0) bounds.x -= layout.row.item_offset;
+        layout.at_y = y;
+        layout.row.index = index;
+        return bounds;
+    }
+
     /// Draw greedily word-wrapped text in the next layout slot (`nk_label_wrap`).
     pub fn labelWrap(ctx: *Context, str: []const u8) !void {
         const win = ctx.current.?;
@@ -2361,13 +2398,79 @@ pub const Context = struct {
         return true;
     }
 
-    fn popupClose(ctx: *Context) void {
+    /// Close the popup currently being built (`nk_popup_close` /
+    /// `nk_contextual_close`).
+    pub fn popupClose(ctx: *Context) void {
         const popup = ctx.current.?;
         popup.flags.hidden = true;
         if (popup.parent) |p| p.popup.active = false;
     }
 
-    fn popupEnd(ctx: *Context) void {
+    /// Open a blocking popup window; the parent goes read-only while it is open.
+    /// Returns true when visible — then emit contents and call `popupEnd`
+    /// (`nk_popup_begin`). `rect` is in window-local coordinates.
+    pub fn popupBegin(ctx: *Context, ptype: PopupType, title: []const u8, flags: WindowFlags, rect: Rect) !bool {
+        const win = ctx.current.?;
+        const title_hash = std.hash.Murmur3_32.hashWithSeed(title, @intFromEnum(PanelType.popup));
+
+        if (win.popup.win == null) {
+            const p = try ctx.allocator.create(Window);
+            p.* = .{ .name = try ctx.allocator.dupe(u8, ""), .buffer = CommandBuffer.init(ctx.allocator), .parent = win };
+            win.popup.win = p;
+            win.popup.active = false;
+            win.popup.type = .popup;
+        }
+        const popup = win.popup.win.?;
+
+        if (win.popup.name != title_hash) {
+            if (!win.popup.active) {
+                // a different popup is requested and none is open: reset it
+                const buf = popup.buffer;
+                const name = popup.name;
+                popup.* = .{ .name = name, .buffer = buf, .parent = win };
+                win.popup.name = title_hash;
+                win.popup.active = true;
+                win.popup.type = .popup;
+            } else return false; // another popup is already open
+        }
+
+        ctx.current = popup;
+        var r = rect;
+        r.x += win.layout.?.clip.x;
+        r.y += win.layout.?.clip.y;
+        popup.parent = win;
+        popup.bounds = r;
+        popup.seq = ctx.seq;
+        popup.flags = flags;
+        popup.flags.border = true;
+        if (ptype == .dynamic) popup.flags.dynamic = true;
+
+        const panel = try ctx.allocator.create(Panel);
+        panel.* = .{ .buffer = &win.buffer, .offset_x = &popup.scrollbar.x, .offset_y = &popup.scrollbar.y };
+        popup.layout = panel;
+
+        win.buffer.pushScissor(math.null_rect) catch {};
+
+        if (ctx.panelBegin(title, .popup)) {
+            win.layout.?.flags.rom = true;
+            win.layout.?.flags.remove_rom = false;
+            win.popup.active = true;
+            panel.parent = win.layout;
+            return true;
+        } else {
+            win.layout.?.flags.remove_rom = true;
+            win.layout.?.flags.rom = false;
+            win.popup.active = false;
+            popup.flags = .{};
+            ctx.allocator.destroy(panel);
+            popup.layout = null;
+            ctx.current = win;
+            return false;
+        }
+    }
+
+    /// Close a blocking popup opened with `popupBegin` (`nk_popup_end`).
+    pub fn popupEnd(ctx: *Context) void {
         const popup = ctx.current.?;
         const win = popup.parent.?;
         if (popup.flags.hidden) {
@@ -2381,7 +2484,60 @@ pub const Context = struct {
         win.buffer.pushScissor(win.layout.?.clip) catch {};
     }
 
-    fn contextualEnd(ctx: *Context) void {
+    /// Open a right-click contextual popup anchored at `trigger_bounds`. Returns
+    /// true when open — then emit `contextualItemLabel`s/widgets and call
+    /// `contextualEnd` (`nk_contextual_begin`).
+    pub fn contextualBegin(ctx: *Context, flags: WindowFlags, size: Vec2, trigger_bounds: Rect) !bool {
+        const win = ctx.current.?;
+        win.popup.con_count += 1;
+        if (win != ctx.active) return false;
+
+        const popup = win.popup.win;
+        const is_open = popup != null and win.popup.type == .contextual;
+        const in: ?*Input = if (win.widgets_disabled) null else &ctx.input;
+        const i = in orelse return false;
+
+        const is_clicked = i.mouseClicked(.right, trigger_bounds);
+        if (win.popup.active_con != 0 and win.popup.con_count != win.popup.active_con) return false;
+        if (!is_open and win.popup.active_con != 0) win.popup.active_con = 0;
+        if (!is_open and !is_clicked) return false;
+
+        win.popup.active_con = win.popup.con_count;
+        var body: Rect = .{ .w = size.x, .h = size.y };
+        if (is_clicked) {
+            body.x = i.mouse.pos.x;
+            body.y = i.mouse.pos.y;
+        } else {
+            body.x = popup.?.bounds.x;
+            body.y = popup.?.bounds.y;
+        }
+
+        var f = flags;
+        f.no_scrollbar = true;
+        const ret = try ctx.nonblockBegin(f, body, .{ .x = -1, .y = -1, .w = 0, .h = 0 }, .contextual);
+        if (ret) {
+            win.popup.type = .contextual;
+        } else {
+            win.popup.active_con = 0;
+            win.popup.type = .none;
+            if (win.popup.win) |pw| pw.flags = .{};
+        }
+        return ret;
+    }
+
+    /// A clickable contextual entry; closes the popup on click
+    /// (`nk_contextual_item_label`).
+    pub fn contextualItemLabel(ctx: *Context, lbl: []const u8, alignment: Align) !bool {
+        return ctx.comboItemLabel(lbl, alignment);
+    }
+
+    /// Close the open contextual popup (`nk_contextual_close`).
+    pub fn contextualClose(ctx: *Context) void {
+        ctx.popupClose();
+    }
+
+    /// Close a contextual popup opened with `contextualBegin` (`nk_contextual_end`).
+    pub fn contextualEnd(ctx: *Context) void {
         const popup = ctx.current.?;
         const panel = popup.layout.?;
         if (panel.flags.dynamic) {
@@ -2527,6 +2683,47 @@ pub const Context = struct {
     /// Close an open menu (`nk_menu_end`).
     pub fn menuEnd(ctx: *Context) void {
         ctx.contextualEnd();
+    }
+
+    // --- tooltip ----------------------------------------------------------
+
+    fn tooltipBegin(ctx: *Context, width: f32) !bool {
+        const win = ctx.current.?;
+        // a tooltip cannot replace an open nonblocking popup (combo/menu/contextual)
+        if (win.popup.win != null and win.popup.type.isNonblock()) return false;
+        const clip = win.layout.?.clip;
+        const bounds: Rect = .{
+            .x = @floor(ctx.input.mouse.pos.x + 1) - clip.x,
+            .y = @floor(ctx.input.mouse.pos.y + 1) - clip.y,
+            .w = @ceil(width),
+            .h = @ceil(math.null_rect.h),
+        };
+        const ret = try ctx.popupBegin(.dynamic, "__##Tooltip##__", .{ .no_scrollbar = true, .border = true }, bounds);
+        if (ret) win.layout.?.flags.rom = false; // a tooltip does not block the parent
+        win.popup.type = .tooltip;
+        if (ctx.current.?.layout) |l| l.type = .tooltip;
+        return ret;
+    }
+
+    fn tooltipEnd(ctx: *Context) void {
+        ctx.current.?.seq -%= 1; // transient: re-created every frame, GC'd otherwise
+        ctx.popupClose();
+        ctx.popupEnd();
+    }
+
+    /// Show a simple text tooltip at the mouse position; call it when the
+    /// trigger area is hovered (`nk_tooltip`).
+    pub fn tooltip(ctx: *Context, text: []const u8) !void {
+        const s = &ctx.style;
+        const padding = s.window.padding;
+        const font = s.font.?;
+        const text_width = font.textWidth(text) + 4 * padding.x;
+        const text_height = font.height + 2 * padding.y;
+        if (try ctx.tooltipBegin(text_width)) {
+            ctx.layoutRowDynamic(text_height, 1);
+            try ctx.label(text, Align.text_left);
+            ctx.tooltipEnd();
+        }
     }
 };
 
