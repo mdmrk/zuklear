@@ -335,7 +335,7 @@ pub const Context = struct {
     prop_edit: ?text_editor.TextEdit = null,
 
     pub fn init(allocator: std.mem.Allocator, font: ?*const UserFont) Context {
-        var s = Style.default();
+        var s: Style = .default();
         if (font) |f| s.font = f;
         return .{ .allocator = allocator, .style = s };
     }
@@ -611,8 +611,8 @@ pub const Context = struct {
             header.h += 1.0;
             var text_bg: Color = .{ .a = 0 };
             switch (bg) {
-                .image => |img| out.drawImage(header, img, Color.white) catch {},
-                .nine_slice => |sl| out.drawNineSlice(header, sl, Color.white) catch {},
+                .image => |img| out.drawImage(header, img, .white) catch {},
+                .nine_slice => |sl| out.drawNineSlice(header, sl, .white) catch {},
                 .color => |col| {
                     text_bg = col;
                     out.fillRect(header, 0, col) catch {};
@@ -621,7 +621,7 @@ pub const Context = struct {
 
             // close / minimize buttons
             const hdr_in: ?*const Input = if (win.flags.no_input) null else &ctx.input;
-            var btn = Rect{
+            var btn: Rect = .{
                 .y = header.y + s.window.header.padding.y,
                 .h = header.h - 2 * s.window.header.padding.y,
             };
@@ -658,7 +658,7 @@ pub const Context = struct {
             }
 
             // title label
-            var title_label = Rect{};
+            var title_label: Rect = .{};
             const t = font.textWidth(title);
             title_label.x = header.x + s.window.header.padding.x + s.window.header.label_padding.x;
             title_label.y = header.y + s.window.header.label_padding.y;
@@ -673,8 +673,8 @@ pub const Context = struct {
             body.y = win.bounds.y + layout.header_height;
             body.h = win.bounds.h - layout.header_height;
             switch (s.window.fixed_background) {
-                .image => |img| out.drawImage(body, img, Color.white) catch {},
-                .nine_slice => |sl| out.drawNineSlice(body, sl, Color.white) catch {},
+                .image => |img| out.drawImage(body, img, .white) catch {},
+                .nine_slice => |sl| out.drawNineSlice(body, sl, .white) catch {},
                 .color => |col| out.fillRect(body, s.window.rounding, col) catch {},
             }
         }
@@ -713,7 +713,7 @@ pub const Context = struct {
                 (ctx.active == win and layout.has_scrolling);
 
             // vertical
-            const vscroll = Rect{
+            const vscroll: Rect = .{
                 .x = layout.bounds.x + layout.bounds.w + panel_padding.x,
                 .y = layout.bounds.y,
                 .w = scrollbar_size.x,
@@ -726,7 +726,7 @@ pub const Context = struct {
             if (in_sb != null and has_scrolling) ctx.input.mouse.scroll_delta.y = 0;
 
             // horizontal
-            const hscroll = Rect{
+            const hscroll: Rect = .{
                 .x = layout.bounds.x,
                 .y = layout.bounds.y + layout.bounds.h,
                 .w = layout.bounds.w,
@@ -740,7 +740,7 @@ pub const Context = struct {
 
         // window resize scaler (bottom-right grip)
         if (layout.flags.scalable and !layout.flags.minimized and !layout.flags.no_input) {
-            var scaler = Rect{
+            var scaler: Rect = .{
                 .w = scrollbar_size.x,
                 .h = scrollbar_size.y,
                 .y = layout.bounds.y + layout.bounds.h,
@@ -752,8 +752,8 @@ pub const Context = struct {
             if (layout.flags.no_scrollbar) scaler.x -= scaler.w;
 
             switch (s.window.scaler) {
-                .image => |img| out.drawImage(scaler, img, Color.white) catch {},
-                .nine_slice => |sl| out.drawNineSlice(scaler, sl, Color.white) catch {},
+                .image => |img| out.drawImage(scaler, img, .white) catch {},
+                .nine_slice => |sl| out.drawNineSlice(scaler, sl, .white) catch {},
                 .color => |col| if (layout.flags.scale_left)
                     out.fillTriangle(scaler.x, scaler.y, scaler.x, scaler.y + scaler.h, scaler.x + scaler.w, scaler.y + scaler.h, col) catch {}
                 else
@@ -1032,7 +1032,7 @@ pub const Context = struct {
         var item_offset: f32 = 0;
         var item_width: f32 = 0;
         var item_spacing: f32 = 0;
-        var bounds = Rect{};
+        var bounds: Rect = .{};
 
         switch (layout.row.type) {
             .dynamic_fixed => {
@@ -1282,7 +1282,7 @@ pub const Context = struct {
 
     /// Draw an image in the next layout slot (`nk_image`).
     pub fn image(ctx: *Context, img: image_mod.Image) !void {
-        try ctx.imageColor(img, Color.white);
+        try ctx.imageColor(img, .white);
     }
 
     // --- knob -------------------------------------------------------------
@@ -1317,7 +1317,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const w = ctx.widget();
         if (w.state == .invalid) return false;
-        return color_picker_widget.doColorPicker(&ctx.last_widget_state, win.layout.?.buffer, col, fmt, w.bounds, math.Vec2.init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
+        return color_picker_widget.doColorPicker(&ctx.last_widget_state, win.layout.?.buffer, col, fmt, w.bounds, .init(0, 0), ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
     // --- edit (text input) ------------------------------------------------
@@ -1341,7 +1341,7 @@ pub const Context = struct {
         const bounds = w.bounds;
         const in: ?*Input = if (w.state == .rom or w.state == .disabled or win.layout.?.flags.rom) null else &ctx.input;
 
-        const area = Rect{
+        const area: Rect = .{
             .x = bounds.x + s.padding.x + s.border,
             .y = bounds.y + s.padding.y + s.border,
             .w = bounds.w - 2 * (s.padding.x + s.border),
@@ -1376,7 +1376,7 @@ pub const Context = struct {
             editor.mode = .insert;
         }
 
-        var events = EditEvents{ .active = editor.active, .inactive = !editor.active };
+        var events: EditEvents = .{ .active = editor.active, .inactive = !editor.active };
         if (prev_active != editor.active) {
             if (editor.active) events.activated = true else events.deactivated = true;
         }
@@ -1416,8 +1416,8 @@ pub const Context = struct {
         const text_color = if (wstate.actived) s.text_active else if (wstate.hover) s.text_hover else s.text_normal;
         var text_bg: Color = .{ .a = 0 };
         switch (bg) {
-            .image => |img| try out.drawImage(bounds, img, Color.white),
-            .nine_slice => |sl| try out.drawNineSlice(bounds, sl, Color.white),
+            .image => |img| try out.drawImage(bounds, img, .white),
+            .nine_slice => |sl| try out.drawNineSlice(bounds, sl, .white),
             .color => |col| {
                 text_bg = col;
                 try out.fillRect(bounds, s.rounding, col);
@@ -1458,17 +1458,17 @@ pub const Context = struct {
             }
             const ax = font.textWidth(bytes[0..(editor.string.atRune(a).?.offset)]);
             const bx = font.textWidth(bytes[0..(editor.string.atRune(b).?.offset)]);
-            try out.fillRect(Rect.init(ox + ax, area.y, bx - ax, area.h), 0, s.selected_normal);
+            try out.fillRect(.init(ox + ax, area.y, bx - ax, area.h), 0, s.selected_normal);
         }
 
         // text (drawn at the scrolled origin; the scissor clips it to the field)
-        const text_rect = Rect{ .x = ox, .y = area.y, .w = font.textWidth(bytes) + s.cursor_size, .h = area.h };
-        try text_widget.widgetText(out, text_rect, bytes, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
+        const text_rect: Rect = .{ .x = ox, .y = area.y, .w = font.textWidth(bytes) + s.cursor_size, .h = area.h };
+        try text_widget.widgetText(out, text_rect, bytes, .{ .left = true, .middle = true }, .init(0, 0), text_bg, text_color, font);
 
         // cursor
         if (editor.active and !flags.no_cursor and !editor.hasSelection()) {
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
-            try out.fillRect(Rect.init(ox + cursor_x, area.y, s.cursor_size, area.h), 0, cursor_color);
+            try out.fillRect(.init(ox + cursor_x, area.y, s.cursor_size, area.h), 0, cursor_color);
         }
 
         try out.pushScissor(old_clip);
@@ -1509,7 +1509,7 @@ pub const Context = struct {
         const target_x = mouse.x - line_origin_x;
         var x: f32 = 0;
         var col: usize = 0;
-        var it = std.unicode.Utf8Iterator{ .bytes = line_bytes, .i = 0 };
+        var it: std.unicode.Utf8Iterator = .{ .bytes = line_bytes, .i = 0 };
         while (it.nextCodepointSlice()) |slice| {
             const gw = font.textWidth(slice);
             if (target_x < x + gw / 2) break;
@@ -1548,13 +1548,13 @@ pub const Context = struct {
         var it = std.mem.splitScalar(u8, bytes, '\n');
         while (it.next()) |line| {
             if (y + row_h >= area.y and y <= area.y + area.h)
-                try text_widget.widgetText(out, Rect{ .x = area.x, .y = y, .w = area.w, .h = row_h }, line, Align{ .left = true, .top = true }, math.Vec2.init(0, 0), text_bg, text_color, font);
+                try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = row_h }, line, .{ .left = true, .top = true }, .init(0, 0), text_bg, text_color, font);
             y += row_h;
         }
 
         if (editor.active and !flags.no_cursor) {
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
-            try out.fillRect(Rect.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
+            try out.fillRect(.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
         }
     }
 
@@ -1587,22 +1587,22 @@ pub const Context = struct {
                 try out.fillRect(property, s.rounding, col);
                 try out.strokeRect(property, s.rounding, s.border, s.border_color);
             },
-            .image => |img| try out.drawImage(property, img, Color.white),
-            .nine_slice => |sl| try out.drawNineSlice(property, sl, Color.white),
+            .image => |img| try out.drawImage(property, img, .white),
+            .nine_slice => |sl| try out.drawNineSlice(property, sl, .white),
         }
 
         const bh = font.height;
-        const left = Rect{ .x = property.x + s.border + s.padding.x, .y = property.y + s.border + property.h / 2 - bh / 2, .w = bh, .h = bh };
-        const right = Rect{ .x = property.x + property.w - (bh + s.padding.x), .y = left.y, .w = bh, .h = bh };
+        const left: Rect = .{ .x = property.x + s.border + s.padding.x, .y = property.y + s.border + property.h / 2 - bh / 2, .w = bh, .h = bh };
+        const right: Rect = .{ .x = property.x + property.w - (bh + s.padding.x), .y = left.y, .w = bh, .h = bh };
         var ws: widget_mod.States = .{};
         if (try button_widget.doButtonSymbol(&ws, out, left, s.sym_left, .default, &s.dec_button, in, font)) value.* -= step;
         if (try button_widget.doButtonSymbol(&ws, out, right, s.sym_right, .default, &s.inc_button, in, font)) value.* += step;
 
         const lw = font.textWidth(name);
-        const name_rect = Rect{ .x = left.x + left.w + s.padding.x, .y = property.y + s.border + s.padding.y, .w = lw + 2 * s.padding.x, .h = property.h - 2 * (s.border + s.padding.y) };
-        try text_widget.widgetText(out, name_rect, name, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+        const name_rect: Rect = .{ .x = left.x + left.w + s.padding.x, .y = property.y + s.border + s.padding.y, .w = lw + 2 * s.padding.x, .h = property.h - 2 * (s.border + s.padding.y) };
+        try text_widget.widgetText(out, name_rect, name, .{ .left = true, .middle = true }, .init(0, 0), .{ .a = 0 }, s.label_normal, font);
 
-        const value_rect = Rect{ .x = name_rect.x + name_rect.w, .y = property.y + s.border, .w = right.x - (name_rect.x + name_rect.w), .h = property.h - 2 * s.border };
+        const value_rect: Rect = .{ .x = name_rect.x + name_rect.w, .y = property.y + s.border, .w = right.x - (name_rect.x + name_rect.w), .h = property.h - 2 * s.border };
 
         // start editing on a click in the value area
         if (!editing) {
@@ -1652,12 +1652,12 @@ pub const Context = struct {
         if (editing) {
             const pe = &ctx.prop_edit.?;
             const cx = font.textWidth(pe.text());
-            try text_widget.widgetText(out, value_rect, pe.text(), Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
-            try out.fillRect(Rect.init(value_rect.x + cx, value_rect.y, 1, value_rect.h), 0, s.label_normal);
+            try text_widget.widgetText(out, value_rect, pe.text(), .{ .left = true, .middle = true }, .init(0, 0), .{ .a = 0 }, s.label_normal, font);
+            try out.fillRect(.init(value_rect.x + cx, value_rect.y, 1, value_rect.h), 0, s.label_normal);
         } else {
             var nbuf: [64]u8 = undefined;
             const vstr = std.fmt.bufPrint(&nbuf, "{d:.2}", .{value.*}) catch "?";
-            try text_widget.widgetText(out, value_rect, vstr, Align{ .left = true, .middle = true }, math.Vec2.init(0, 0), .{ .a = 0 }, s.label_normal, font);
+            try text_widget.widgetText(out, value_rect, vstr, .{ .left = true, .middle = true }, .init(0, 0), .{ .a = 0 }, s.label_normal, font);
         }
 
         if (!editing) value.* = std.math.clamp(value.*, min, max);
@@ -1763,13 +1763,13 @@ pub const Context = struct {
         const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
         const left = @intFromEnum(input_mod.Button.left);
         const sl = &chart.slots[slot];
-        var ret = ChartEvent{};
+        var ret: ChartEvent = .{};
         const step = chart.w / @as(f32, @floatFromInt(sl.count));
         const ratio = (value - sl.min) / (sl.max - sl.min);
 
         if (sl.index == 0) {
             sl.last = .{ .x = chart.x, .y = (chart.y + chart.h) - ratio * chart.h };
-            const bounds = Rect.init(sl.last.x - 2, sl.last.y - 2, 4, 4);
+            const bounds: Rect = .init(sl.last.x - 2, sl.last.y - 2, 4, 4);
             var col = sl.color;
             if (!layout.flags.rom) if (in) |i| if (Rect.init(sl.last.x - 3, sl.last.y - 3, 6, 6).contains(i.mouse.pos)) {
                 if (i.isMouseHoveringRect(bounds)) ret.hovering = true;
@@ -1782,15 +1782,15 @@ pub const Context = struct {
         }
 
         var col = sl.color;
-        const cur = Vec2.init(chart.x + step * @as(f32, @floatFromInt(sl.index)), (chart.y + chart.h) - ratio * chart.h);
+        const cur: Vec2 = .init(chart.x + step * @as(f32, @floatFromInt(sl.index)), (chart.y + chart.h) - ratio * chart.h);
         out.strokeLine(sl.last.x, sl.last.y, cur.x, cur.y, 1.0, col) catch {};
-        const bounds = Rect.init(cur.x - 3, cur.y - 3, 6, 6);
+        const bounds: Rect = .init(cur.x - 3, cur.y - 3, 6, 6);
         if (!layout.flags.rom) if (in) |i| if (i.isMouseHoveringRect(bounds)) {
             ret.hovering = true;
             if (!i.mouse.buttons[left].down and i.mouse.buttons[left].clicked != 0) ret.clicked = true;
             col = sl.highlight;
         };
-        if (sl.show_markers) out.fillRect(Rect.init(cur.x - 2, cur.y - 2, 4, 4), 0, col) catch {};
+        if (sl.show_markers) out.fillRect(.init(cur.x - 2, cur.y - 2, 4, 4), 0, col) catch {};
         sl.last = cur;
         sl.index += 1;
         return ret;
@@ -1803,10 +1803,10 @@ pub const Context = struct {
         const in: ?*const Input = if (win.widgets_disabled) null else &ctx.input;
         const left = @intFromEnum(input_mod.Button.left);
         const sl = &chart.slots[slot];
-        var ret = ChartEvent{};
+        var ret: ChartEvent = .{};
         if (sl.index >= sl.count) return ret;
 
-        var item = Rect{};
+        var item: Rect = .{};
         if (sl.count != 0) {
             const padding: f32 = @floatFromInt(sl.count - 1);
             item.w = (chart.w - padding) / @as(f32, @floatFromInt(sl.count));
@@ -1879,24 +1879,24 @@ pub const Context = struct {
         else
             (if (ttype == .tab) &s.tab.tab_minimize_button else &s.tab.node_minimize_button);
 
-        var sym = Rect{ .w = font.height, .h = font.height, .y = header.y + s.tab.padding.y, .x = header.x + s.tab.padding.x };
+        var sym: Rect = .{ .w = font.height, .h = font.height, .y = header.y + s.tab.padding.y, .x = header.x + s.tab.padding.x };
         _ = try button_widget.doButtonSymbol(&ws, out, sym, sym_type, .default, btn_style, null, font);
 
         if (img) |im| {
             sym.x = sym.x + sym.w + 4 * item_spacing.x;
-            try out.drawImage(sym, im, Color.white);
+            try out.drawImage(sym, im, .white);
             sym.w = font.height + s.tab.spacing.x;
         }
 
         // label
         header.w = @max(header.w, sym.w + item_spacing.x);
-        const label_rect = Rect{
+        const label_rect: Rect = .{
             .x = sym.x + sym.w + item_spacing.x,
             .y = sym.y,
             .w = header.w - (sym.w + item_spacing.y + s.tab.indent),
             .h = font.height,
         };
-        try text_widget.widgetText(out, label_rect, title, Align.text_left, math.Vec2.init(0, 0), text_bg, s.tab.text.factor(s.tab.color_factor), font);
+        try text_widget.widgetText(out, label_rect, title, Align.text_left, .init(0, 0), text_bg, s.tab.text.factor(s.tab.color_factor), font);
 
         if (state.*) {
             const off_x: f32 = @floatFromInt(layout.offset_x.*);
@@ -1981,7 +1981,7 @@ pub const Context = struct {
         const s = &ctx.style;
         const panel_padding = panelGetPadding(s, .group);
 
-        var pb = Rect{
+        var pb: Rect = .{
             .x = g.bounds.x - panel_padding.x,
             .y = g.bounds.y - g.header_height,
             .w = g.bounds.w + 2 * panel_padding.x,
@@ -2100,7 +2100,7 @@ pub const Context = struct {
         const panel = popup.layout.?;
         if (panel.flags.dynamic) {
             // close on the next frame if clicked in the empty space below content
-            var body = Rect{};
+            var body: Rect = .{};
             if (panel.at_y < panel.bounds.y + panel.bounds.h) {
                 const padding = panelGetPadding(&ctx.style, panel.type);
                 body = panel.bounds;
@@ -2117,7 +2117,7 @@ pub const Context = struct {
 
     fn comboBegin(ctx: *Context, win: *Window, size: Vec2, is_clicked: bool, header: Rect) !bool {
         const popup = win.popup.win;
-        const body = Rect{
+        const body: Rect = .{
             .x = header.x,
             .w = size.x,
             .y = header.y + header.h - ctx.style.window.combo_border,
@@ -2163,7 +2163,7 @@ pub const Context = struct {
         }
 
         // dropdown arrow button
-        const btn = Rect{
+        const btn: Rect = .{
             .w = header.h - 2 * s.combo.button_padding.y,
             .x = header.x + header.w - header.h - s.combo.button_padding.x,
             .y = header.y + s.combo.button_padding.y,
@@ -2173,13 +2173,13 @@ pub const Context = struct {
         _ = button_widget.doButtonSymbol(&ctx.last_widget_state, out, btn, sym, .default, &s.combo.button, in, font) catch false;
 
         // selected label
-        const label_rect = Rect{
+        const label_rect: Rect = .{
             .x = header.x + s.combo.content_padding.x,
             .y = header.y + s.combo.content_padding.y,
             .h = header.h - 2 * s.combo.content_padding.y,
             .w = btn.x - (s.combo.content_padding.x + s.combo.spacing.x) - (header.x + s.combo.content_padding.x),
         };
-        try text_widget.widgetText(out, label_rect, selected, Align.text_left, math.Vec2.init(0, 0), text_bg, label_col, font);
+        try text_widget.widgetText(out, label_rect, selected, Align.text_left, .init(0, 0), text_bg, label_col, font);
 
         return ctx.comboBegin(win, size, is_clicked, header);
     }
@@ -2207,7 +2207,7 @@ pub const Context = struct {
     // --- menu -------------------------------------------------------------
 
     fn menuBegin(ctx: *Context, win: *Window, id: []const u8, is_clicked: bool, header: Rect, size: Vec2) !bool {
-        const body = Rect{ .x = header.x, .w = size.x, .y = header.y + header.h, .h = size.y };
+        const body: Rect = .{ .x = header.x, .w = size.x, .y = header.y + header.h, .h = size.y };
         const hash = std.hash.Murmur3_32.hashWithSeed(id, @intFromEnum(PanelType.menu));
         const popup = win.popup.win;
         const is_open = popup != null;
@@ -2249,16 +2249,16 @@ pub const Context = struct {
 fn testWidth(_: @import("handle.zig").Handle, _: f32, text: []const u8) f32 {
     return @as(f32, @floatFromInt(text.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "begin/layout/widget/end produces commands and lays out a row" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     // place the cursor inside the first widget so it reports as interactive
     ctx.input.mouse.pos = .{ .x = 20, .y = 50 };
 
-    const visible = try ctx.begin("win", Rect.init(0, 0, 200, 200), .{ .border = true, .title = true });
+    const visible = try ctx.begin("win", .init(0, 0, 200, 200), .{ .border = true, .title = true });
     try std.testing.expect(visible);
 
     ctx.layoutRowDynamic(30, 2);
@@ -2276,20 +2276,20 @@ test "begin/layout/widget/end produces commands and lays out a row" {
 }
 
 test "window is reused across frames and GC'd when dropped" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     // frame 1: two windows
-    _ = try ctx.begin("a", Rect.init(0, 0, 100, 100), .{ .title = true });
+    _ = try ctx.begin("a", .init(0, 0, 100, 100), .{ .title = true });
     ctx.end();
-    _ = try ctx.begin("b", Rect.init(0, 0, 100, 100), .{ .title = true });
+    _ = try ctx.begin("b", .init(0, 0, 100, 100), .{ .title = true });
     ctx.end();
     const win_a = ctx.lookup.get("a").?;
     try std.testing.expectEqual(@as(usize, 2), ctx.windows.items.len);
     ctx.clear();
 
     // frame 2: only "a" — "b" should be collected
-    _ = try ctx.begin("a", Rect.init(0, 0, 100, 100), .{ .title = true });
+    _ = try ctx.begin("a", .init(0, 0, 100, 100), .{ .title = true });
     ctx.end();
     try std.testing.expectEqual(win_a, ctx.lookup.get("a").?); // same window reused
     ctx.clear();
@@ -2298,9 +2298,9 @@ test "window is reused across frames and GC'd when dropped" {
 }
 
 test "label emits a text command in the current row" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
-    _ = try ctx.begin("win", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("win", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(20, 1);
     try ctx.label("hello", .{ .left = true, .middle = true });
     ctx.end();
@@ -2314,7 +2314,7 @@ test "label emits a text command in the current row" {
 }
 
 test "button click is detected through the context" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     // place cursor and press inside where the button will be laid out
@@ -2322,7 +2322,7 @@ test "button click is detected through the context" {
     ctx.input.mouse.pos = .{ .x = 30, .y = 30 };
     ctx.input.button(.left, 30, 30, true);
 
-    _ = try ctx.begin("win", Rect.init(0, 0, 200, 200), .{});
+    _ = try ctx.begin("win", .init(0, 0, 200, 200), .{});
     ctx.layoutRowDynamic(40, 1);
     const clicked = try ctx.buttonLabel("press");
     ctx.end();
@@ -2330,12 +2330,12 @@ test "button click is detected through the context" {
 }
 
 test "clicking the close button hides the window next frame" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     // frame 1: locate where the right-aligned close button sits and click it.
     // header height = 13 + 2*4 + 2*4 = 29; close button is ~ at the top-right.
-    const bounds = Rect.init(0, 0, 200, 200);
+    const bounds: Rect = .init(0, 0, 200, 200);
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 190, .y = 12 };
     ctx.input.button(.left, 190, 12, true); // press (default buttons trigger on press)
@@ -2352,12 +2352,12 @@ test "clicking the close button hides the window next frame" {
 }
 
 test "tree node persists collapse state and toggles on click" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     // frame 1: starts minimized -> not open
     ctx.input.begin();
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
     const open1 = try ctx.treePush(.tab, "Section", .minimized, 1);
     if (open1) ctx.treePop();
     ctx.end();
@@ -2368,7 +2368,7 @@ test "tree node persists collapse state and toggles on click" {
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
     ctx.input.button(.left, 20, 20, true);
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
     const open2 = try ctx.treePush(.tab, "Section", .minimized, 1);
     if (open2) ctx.treePop();
     ctx.end();
@@ -2377,7 +2377,7 @@ test "tree node persists collapse state and toggles on click" {
 
     // frame 3: state persisted -> still open without further input
     ctx.input.begin();
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
     const open3 = try ctx.treePush(.tab, "Section", .minimized, 1);
     if (open3) ctx.treePop();
     ctx.end();
@@ -2385,12 +2385,12 @@ test "tree node persists collapse state and toggles on click" {
 }
 
 test "group scroll offset persists across frames" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     const drawGroup = struct {
         fn run(c: *Context) !void {
-            _ = try c.begin("w", Rect.init(0, 0, 300, 300), .{});
+            _ = try c.begin("w", .init(0, 0, 300, 300), .{});
             c.layoutRowDynamic(120, 1);
             if (try c.groupBegin("g", .{ .border = true })) {
                 c.layoutRowDynamic(20, 1);
@@ -2419,10 +2419,10 @@ test "group scroll offset persists across frames" {
 }
 
 test "group lays out a nested sub-panel" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
-    _ = try ctx.begin("w", Rect.init(0, 0, 300, 300), .{});
+    _ = try ctx.begin("w", .init(0, 0, 300, 300), .{});
     ctx.layoutRowDynamic(200, 1);
     const open = try ctx.groupBegin("g", .{ .border = true });
     try std.testing.expect(open);
@@ -2438,7 +2438,7 @@ test "group lays out a nested sub-panel" {
 }
 
 test "multiline edit renders lines and a cursor" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
     defer editor.deinit();
@@ -2446,7 +2446,7 @@ test "multiline edit renders lines and a cursor" {
     // multiline (single_line stays false); type two lines
     try editor.insert("line one\nline two");
 
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 120), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 120), .{});
     ctx.layoutRowDynamic(80, 1);
     _ = try ctx.editBuffer(EditFlags.box, &editor);
     ctx.end();
@@ -2460,7 +2460,7 @@ test "multiline edit renders lines and a cursor" {
 }
 
 test "clicking in an edit field positions the cursor" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     var editor = try text_editor.TextEdit.init(std.testing.allocator, 64);
     defer editor.deinit();
@@ -2472,7 +2472,7 @@ test "clicking in an edit field positions the cursor" {
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 22, .y = 17 };
     ctx.input.button(.left, 22, 17, true);
-    _ = try ctx.begin("w", Rect.init(0, 0, 120, 60), .{});
+    _ = try ctx.begin("w", .init(0, 0, 120, 60), .{});
     ctx.layoutRowDynamic(30, 1);
     _ = try ctx.editBuffer(EditFlags.field, &editor);
     ctx.end();
@@ -2481,7 +2481,7 @@ test "clicking in an edit field positions the cursor" {
 }
 
 test "edit scrolls horizontally to keep the cursor visible" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
     defer editor.deinit();
@@ -2489,7 +2489,7 @@ test "edit scrolls horizontally to keep the cursor visible" {
     editor.single_line = true;
     try editor.insert("a long line of text that does not fit in the field");
 
-    _ = try ctx.begin("w", Rect.init(0, 0, 120, 60), .{});
+    _ = try ctx.begin("w", .init(0, 0, 120, 60), .{});
     ctx.layoutRowDynamic(30, 1);
     _ = try ctx.editBuffer(EditFlags.field, &editor);
     ctx.end();
@@ -2498,16 +2498,16 @@ test "edit scrolls horizontally to keep the cursor visible" {
 }
 
 test "combo opens a popup on click and lays out items" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
 
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
     ctx.input.button(.left, 20, 20, true); // click the combo header
 
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
     ctx.layoutRowStatic(25, 180, 1);
-    const open = try ctx.comboBeginLabel("A", Vec2.init(180, 100));
+    const open = try ctx.comboBeginLabel("A", .init(180, 100));
     try std.testing.expect(open);
     if (open) {
         ctx.layoutRowDynamic(20, 1);
@@ -2523,7 +2523,7 @@ test "combo opens a popup on click and lays out items" {
 }
 
 test "edit field activates on click and accepts typed text" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     var editor = try text_editor.TextEdit.init(std.testing.allocator, 32);
     defer editor.deinit();
@@ -2532,7 +2532,7 @@ test "edit field activates on click and accepts typed text" {
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 20, .y = 20 };
     ctx.input.button(.left, 20, 20, true);
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(30, 1);
     const e1 = try ctx.editBuffer(EditFlags.field, &editor);
     ctx.end();
@@ -2544,7 +2544,7 @@ test "edit field activates on click and accepts typed text" {
     ctx.input.begin();
     ctx.input.char('h');
     ctx.input.char('i');
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(30, 1);
     _ = try ctx.editBuffer(EditFlags.field, &editor);
     ctx.end();
@@ -2553,7 +2553,7 @@ test "edit field activates on click and accepts typed text" {
 }
 
 test "property click-to-edit types a new value" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     var v: f32 = 5;
 
@@ -2562,7 +2562,7 @@ test "property click-to-edit types a new value" {
     ctx.input.mouse.pos = .{ .x = 120, .y = 16 };
     ctx.input.button(.left, 120, 16, true);
     ctx.input.button(.left, 120, 16, false);
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(25, 1);
     _ = try ctx.propertyFloat("X", 0, &v, 100, 1, 0.5);
     ctx.end();
@@ -2573,7 +2573,7 @@ test "property click-to-edit types a new value" {
     ctx.input.begin();
     ctx.input.char('9');
     ctx.input.key(.enter, true);
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(25, 1);
     _ = try ctx.propertyFloat("X", 0, &v, 100, 1, 0.5);
     ctx.end();
@@ -2582,13 +2582,13 @@ test "property click-to-edit types a new value" {
 }
 
 test "property inc/dec buttons change the value" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     // click on the far-right inc button
     ctx.input.begin();
     ctx.input.mouse.pos = .{ .x = 175, .y = 16 };
     ctx.input.button(.left, 175, 16, true);
-    _ = try ctx.begin("w", Rect.init(0, 0, 200, 100), .{});
+    _ = try ctx.begin("w", .init(0, 0, 200, 100), .{});
     ctx.layoutRowDynamic(25, 1);
     var v: f32 = 5;
     _ = try ctx.propertyFloat("X", 0, &v, 10, 1, 0.5);
@@ -2597,9 +2597,9 @@ test "property inc/dec buttons change the value" {
 }
 
 test "line chart emits markers and lines" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
-    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 300, 200), .{});
     ctx.layoutRowDynamic(100, 1);
     const ok = try ctx.chartBegin(.lines, 4, 0, 10);
     try std.testing.expect(ok);
@@ -2617,10 +2617,10 @@ test "line chart emits markers and lines" {
 }
 
 test "ratio row sizes columns proportionally" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     ctx.input.mouse.pos = .{ .x = 20, .y = 50 };
-    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 300, 200), .{});
     ctx.layoutRow(.dynamic, 30, &.{ 0.25, 0.75 });
     const a = ctx.widget();
     const b = ctx.widget();
@@ -2630,9 +2630,9 @@ test "ratio row sizes columns proportionally" {
 }
 
 test "template row gives variable column the leftover space" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
-    _ = try ctx.begin("w", Rect.init(0, 0, 300, 200), .{});
+    _ = try ctx.begin("w", .init(0, 0, 300, 200), .{});
     ctx.layoutRowTemplateBegin(30);
     ctx.layoutRowTemplatePushStatic(40);
     ctx.layoutRowTemplatePushDynamic();
@@ -2645,7 +2645,7 @@ test "template row gives variable column the leftover space" {
 }
 
 test "scaler drag grows a scalable window" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
     const w0: f32 = 200;
     // press on the bottom-right scaler grip, then drag right+down
@@ -2654,23 +2654,23 @@ test "scaler drag grows a scalable window" {
     ctx.input.button(.left, 195, 195, true);
     ctx.input.mouse.pos = .{ .x = 230, .y = 230 };
     ctx.input.mouse.delta = .{ .x = 35, .y = 35 };
-    _ = try ctx.begin("w", Rect.init(0, 0, w0, 200), .{ .scalable = true });
+    _ = try ctx.begin("w", .init(0, 0, w0, 200), .{ .scalable = true });
     ctx.end();
     try std.testing.expect(ctx.lookup.get("w").?.bounds.w > w0);
 }
 
 test "hidden window reports not visible" {
-    var ctx = Context.init(std.testing.allocator, &test_font);
+    var ctx: Context = .init(std.testing.allocator, &test_font);
     defer ctx.deinit();
-    const visible = try ctx.begin("h", Rect.init(0, 0, 100, 100), .{ .hidden = true });
+    const visible = try ctx.begin("h", .init(0, 0, 100, 100), .{ .hidden = true });
     try std.testing.expect(!visible);
     ctx.end();
 }
 
 test "WindowFlags.replacePublic keeps private bits" {
-    const old = WindowFlags{ .minimized = true, .border = true };
-    const new = WindowFlags{ .title = true, .movable = true };
-    const merged = WindowFlags.replacePublic(old, new);
+    const old: WindowFlags = .{ .minimized = true, .border = true };
+    const new: WindowFlags = .{ .title = true, .movable = true };
+    const merged: WindowFlags = .replacePublic(old, new);
     try std.testing.expect(merged.minimized); // private bit kept
     try std.testing.expect(merged.title); // new public bit
     try std.testing.expect(!merged.border); // old public bit cleared

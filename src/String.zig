@@ -148,7 +148,7 @@ pub fn deleteRunes(s: *String, pos: usize, len_in: usize) void {
 /// Locate the glyph at rune position `pos` (`nk_str_at_rune`). Returns an
 /// end-of-string locator when `pos == glyphLen()`, or null when out of range.
 pub fn atRune(s: *const String, pos: usize) ?Located {
-    var it = unicode.Utf8Iterator{ .bytes = s.bytes(), .i = 0 };
+    var it: unicode.Utf8Iterator = .{ .bytes = s.bytes(), .i = 0 };
     var i: usize = 0;
     while (true) : (i += 1) {
         const src = it.i;

@@ -55,17 +55,17 @@ pub fn main(init: std.process.Init) !void {
     window.glMakeContextCurrent(gl_ctx);
     window.glSwapInterval(1);
 
-    var renderer = glr.Renderer.init(&wio.glGetProcAddress);
+    var renderer: glr.Renderer = .init(&wio.glGetProcAddress);
 
     var atlas = try zkfont.bake(gpa, @import("assets").ttf, 18, 512, 512);
     defer atlas.deinit();
     try renderer.uploadFont(gpa, &atlas);
     const font = atlas.userFont();
 
-    var ctx = zk.Context.init(gpa, &font);
+    var ctx: zk.Context = .init(gpa, &font);
     defer ctx.deinit();
 
-    var draw_list = zk.render.vertex.DrawList.init(gpa);
+    var draw_list: zk.render.vertex.DrawList = .init(gpa);
     defer draw_list.deinit();
 
     var fb_w: i32 = 480;
@@ -117,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
         if (closed) break;
 
         // --- build the UI -------------------------------------------------
-        if (try ctx.begin("Demo", zk.Rect.init(20, 20, 440, 480), .{
+        if (try ctx.begin("Demo", .init(20, 20, 440, 480), .{
             .border = true,
             .title = true,
             .movable = true,
@@ -143,7 +143,7 @@ pub fn main(init: std.process.Init) !void {
             _ = try ctx.propertyFloat("Value", 0, &prop, 100, 1, 1);
 
             ctx.layoutRowDynamic(28, 1);
-            if (try ctx.comboBeginLabel(items[selected], zk.Vec2.init(400, 120))) {
+            if (try ctx.comboBeginLabel(items[selected], .init(400, 120))) {
                 ctx.layoutRowDynamic(25, 1);
                 for (items, 0..) |it, idx| {
                     if (try ctx.comboItemLabel(it, .{ .left = true, .middle = true })) selected = idx;
@@ -155,13 +155,13 @@ pub fn main(init: std.process.Init) !void {
 
         // --- convert + draw ----------------------------------------------
         draw_list.reset();
-        const cfg = zk.render.vertex.ConvertConfig{
+        const cfg: zk.render.vertex.ConvertConfig = .{
             .white_uv = atlas.whiteUv(),
             .text_hook = &zkfont.drawListText,
         };
         for (ctx.windows.items) |w| try draw_list.convert(w.buffer.items(), cfg);
 
-        renderer.clear(fb_w, fb_h, zk.Color.rgb(28, 28, 28));
+        renderer.clear(fb_w, fb_h, .rgb(28, 28, 28));
         renderer.render(&draw_list, fb_w, fb_h);
         window.glSwapBuffers();
 

@@ -297,7 +297,7 @@ test "mouse motion tracks delta across frames" {
 
 test "click detection in rect" {
     var in: Input = .{};
-    const r = Rect.init(0, 0, 100, 100);
+    const r: Rect = .init(0, 0, 100, 100);
     in.begin();
     in.button(.left, 50, 50, true); // press inside
     try std.testing.expect(in.isMouseDown(.left));
@@ -310,12 +310,12 @@ test "click detection in rect" {
 
 test "click outside rect is not detected" {
     var in: Input = .{};
-    const r = Rect.init(0, 0, 10, 10);
+    const r: Rect = .init(0, 0, 10, 10);
     in.begin();
     in.button(.left, 50, 50, true);
     in.button(.left, 50, 50, false);
     try std.testing.expect(!in.isMouseClickInRect(.left, r));
-    try std.testing.expect(in.anyMouseClickInRect(Rect.init(0, 0, 100, 100)));
+    try std.testing.expect(in.anyMouseClickInRect(.init(0, 0, 100, 100)));
 }
 
 test "key press and release semantics" {
@@ -333,8 +333,8 @@ test "key press and release semantics" {
 test "scroll accumulates and text input buffers" {
     var in: Input = .{};
     in.begin();
-    in.scroll(Vec2.init(0, 1));
-    in.scroll(Vec2.init(0, 2));
+    in.scroll(.init(0, 1));
+    in.scroll(.init(0, 2));
     try std.testing.expectEqual(Vec2.init(0, 3), in.mouse.scroll_delta);
     in.char('h');
     in.char('i');

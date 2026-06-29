@@ -92,7 +92,7 @@ pub const Atlas = struct {
         _ = height;
         const a: *const Atlas = @ptrCast(@alignCast(handle.ptr.?));
         var total: f32 = 0;
-        var it = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+        var it: std.unicode.Utf8Iterator = .{ .bytes = text, .i = 0 };
         while (it.nextCodepoint()) |cp| total += a.advance(cp);
         return total;
     }
@@ -123,7 +123,7 @@ pub fn drawListText(dl: *vertex.DrawList, cmd: Text) anyerror!void {
     const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
     var pen_x: f32 = @floatFromInt(cmd.x);
     const pen_y: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
-    var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
+    var it: std.unicode.Utf8Iterator = .{ .bytes = cmd.string, .i = 0 };
     while (it.nextCodepoint()) |cp| {
         if (a.quad(cp, pen_x, pen_y)) |q| {
             try dl.quadUV(q.x0, q.y0, q.x1, q.y1, q.u0, q.v0, q.u1, q.v1, cmd.foreground);
@@ -142,7 +142,7 @@ pub fn renderText(r: *software.Rasterizer, cmd: Text) void {
     const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
     var pen_x: f32 = @floatFromInt(cmd.x);
     const baseline: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
-    var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
+    var it: std.unicode.Utf8Iterator = .{ .bytes = cmd.string, .i = 0 };
     while (it.nextCodepoint()) |cp| {
         if (a.packed_(cp)) |pc| {
             // integer top-left of the glyph; copy the source rect texel-for-pixel
@@ -171,7 +171,7 @@ pub fn bake(allocator: std.mem.Allocator, ttf: []const u8, pixel_height: f32, wi
     errdefer allocator.free(bitmap);
     @memset(bitmap, 0);
 
-    var atlas = Atlas{
+    var atlas: Atlas = .{
         .allocator = allocator,
         .bitmap = bitmap,
         .width = width,

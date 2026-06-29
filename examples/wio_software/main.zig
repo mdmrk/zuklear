@@ -59,7 +59,7 @@ pub fn main(init: std.process.Init) !void {
     var atlas = try zkfont.bake(gpa, @import("assets").ttf, 18, 512, 512);
     defer atlas.deinit();
     const font = atlas.userFont();
-    var ctx = zk.Context.init(gpa, &font);
+    var ctx: zk.Context = .init(gpa, &font);
     defer ctx.deinit();
 
     // demo state
@@ -111,7 +111,7 @@ pub fn main(init: std.process.Init) !void {
         if (closed) break;
 
         // --- build the UI -------------------------------------------------
-        if (try ctx.begin("Demo", zk.Rect.init(20, 20, 440, 480), .{
+        if (try ctx.begin("Demo", .init(20, 20, 440, 480), .{
             .border = true,
             .title = true,
             .movable = true,
@@ -137,7 +137,7 @@ pub fn main(init: std.process.Init) !void {
             _ = try ctx.propertyFloat("Value", 0, &prop, 100, 1, 1);
 
             ctx.layoutRowDynamic(28, 1);
-            if (try ctx.comboBeginLabel(items[selected], zk.Vec2.init(400, 120))) {
+            if (try ctx.comboBeginLabel(items[selected], .init(400, 120))) {
                 ctx.layoutRowDynamic(25, 1);
                 for (items, 0..) |it, idx| {
                     if (try ctx.comboItemLabel(it, .{ .left = true, .middle = true })) selected = idx;
@@ -148,10 +148,10 @@ pub fn main(init: std.process.Init) !void {
         ctx.end();
 
         // --- render -------------------------------------------------------
-        var surface = software.Surface{ .pixels = pixels, .width = width, .height = height };
-        surface.clear(zk.Color.rgb(28, 28, 28));
+        var surface: software.Surface = .{ .pixels = pixels, .width = width, .height = height };
+        surface.clear(.rgb(28, 28, 28));
         for (ctx.windows.items) |w| {
-            var ras = software.Rasterizer.init(&surface);
+            var ras: software.Rasterizer = .init(&surface);
             ras.text_fn = &zkfont.renderText; // render the baked TTF glyphs
             ras.renderAll(w.buffer.items());
         }

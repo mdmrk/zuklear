@@ -191,8 +191,8 @@ pub fn roundUpPow2(v: u32) u32 {
 }
 
 test "Vec2 arithmetic" {
-    const a = Vec2.init(1, 2);
-    const b = Vec2.init(3, 4);
+    const a: Vec2 = .init(1, 2);
+    const b: Vec2 = .init(3, 4);
     try std.testing.expectEqual(Vec2.init(4, 6), a.add(b));
     try std.testing.expectEqual(Vec2.init(-2, -2), a.sub(b));
     try std.testing.expectEqual(Vec2.init(2, 4), a.scale(2));
@@ -201,7 +201,7 @@ test "Vec2 arithmetic" {
 }
 
 test "Rect shrink and pad" {
-    const r = Rect.init(10, 10, 100, 80);
+    const r: Rect = .init(10, 10, 100, 80);
     try std.testing.expectEqual(Rect.init(15, 15, 90, 70), r.shrink(5));
     try std.testing.expectEqual(Rect.init(12, 13, 96, 74), r.pad(Vec2.init(2, 3)));
     // Degenerate input clamps instead of inverting.
@@ -209,22 +209,22 @@ test "Rect shrink and pad" {
 }
 
 test "Rect pos/size/contains" {
-    const r = Rect.init(10, 20, 30, 40);
+    const r: Rect = .init(10, 20, 30, 40);
     try std.testing.expectEqual(Vec2.init(10, 20), r.pos());
     try std.testing.expectEqual(Vec2.init(30, 40), r.size());
-    try std.testing.expect(r.contains(Vec2.init(15, 25)));
-    try std.testing.expect(!r.contains(Vec2.init(40, 25))); // right edge exclusive
+    try std.testing.expect(r.contains(.init(15, 25)));
+    try std.testing.expect(!r.contains(.init(40, 25))); // right edge exclusive
 }
 
 test "Rect unify intersects and clamps" {
-    const r = Rect.init(0, 0, 100, 100);
+    const r: Rect = .init(0, 0, 100, 100);
     try std.testing.expectEqual(Rect.init(20, 20, 30, 30), r.unify(20, 20, 50, 50));
     // Disjoint region clamps to zero size.
     try std.testing.expectEqual(Rect.init(200, 200, 0, 0), r.unify(200, 200, 300, 300));
 }
 
 test "triangleFromDirection points" {
-    const r = Rect.init(0, 0, 10, 10);
+    const r: Rect = .init(0, 0, 10, 10);
     const up = triangleFromDirection(r, 0, 0, .up);
     try std.testing.expectEqual(Vec2.init(5, 0), up[0]);
     try std.testing.expectEqual(Vec2.init(10, 10), up[1]);

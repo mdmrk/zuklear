@@ -76,16 +76,16 @@ fn drawScrollbar(out: *CommandBuffer, state: States, style: *const StyleScrollba
     const cursor = if (state.actived) style.cursor_active else if (state.hover) style.cursor_hover else style.cursor_normal;
 
     switch (bg) {
-        .image => |img| try out.drawImage(bounds, img, Color.white),
-        .nine_slice => |sl| try out.drawNineSlice(bounds, sl, Color.white),
+        .image => |img| try out.drawImage(bounds, img, .white),
+        .nine_slice => |sl| try out.drawNineSlice(bounds, sl, .white),
         .color => |col| {
             try out.fillRect(bounds, style.rounding, col);
             try out.strokeRect(bounds, style.rounding, style.border, style.border_color);
         },
     }
     switch (cursor) {
-        .image => |img| try out.drawImage(scroll, img, Color.white),
-        .nine_slice => |sl| try out.drawNineSlice(scroll, sl, Color.white),
+        .image => |img| try out.drawImage(scroll, img, .white),
+        .nine_slice => |sl| try out.drawNineSlice(scroll, sl, .white),
         .color => |col| {
             try out.fillRect(scroll, style.rounding_cursor, col);
             try out.strokeRect(scroll, style.rounding_cursor, style.border_cursor, style.cursor_border_color);
@@ -103,7 +103,7 @@ pub fn doScrollbarV(state: *States, out: *CommandBuffer, scroll_in: Rect, has_sc
 
     var scroll_step: f32 = undefined;
     if (style.show_buttons) {
-        var b = Rect{ .x = scroll.x, .w = scroll.w, .h = scroll.w };
+        var b: Rect = .{ .x = scroll.x, .w = scroll.w, .h = scroll.w };
         const scroll_h = @max(scroll.h - 2 * b.h, 0);
         scroll_step = @min(step, button_pixel_inc);
 
@@ -120,15 +120,15 @@ pub fn doScrollbarV(state: *States, out: *CommandBuffer, scroll_in: Rect, has_sc
     const scroll_ratio = scroll.h / target;
     var scroll_off = scroll_offset / target;
 
-    var cursor = Rect{
+    var cursor: Rect = .{
         .h = @max(scroll_ratio * scroll.h - (2 * style.border + 2 * style.padding.y), 0),
         .y = scroll.y + scroll_off * scroll.h + style.border + style.padding.y,
         .w = scroll.w - (2 * style.border + 2 * style.padding.x),
         .x = scroll.x + style.border + style.padding.x,
     };
 
-    const empty_north = Rect{ .x = scroll.x, .y = scroll.y, .w = scroll.w, .h = @max(cursor.y - scroll.y, 0) };
-    const empty_south = Rect{ .x = scroll.x, .y = cursor.y + cursor.h, .w = scroll.w, .h = @max((scroll.y + scroll.h) - (cursor.y + cursor.h), 0) };
+    const empty_north: Rect = .{ .x = scroll.x, .y = scroll.y, .w = scroll.w, .h = @max(cursor.y - scroll.y, 0) };
+    const empty_south: Rect = .{ .x = scroll.x, .y = cursor.y + cursor.h, .w = scroll.w, .h = @max((scroll.y + scroll.h) - (cursor.y + cursor.h), 0) };
 
     scroll_offset = scrollbarBehavior(state, in, has_scrolling, scroll, cursor, empty_north, empty_south, scroll_offset, target, scroll_step, .vertical);
     scroll_off = scroll_offset / target;
@@ -150,7 +150,7 @@ pub fn doScrollbarH(state: *States, out: *CommandBuffer, scroll_in: Rect, has_sc
 
     var scroll_step: f32 = undefined;
     if (style.show_buttons) {
-        var b = Rect{ .y = scroll.y, .w = scroll.h, .h = scroll.h };
+        var b: Rect = .{ .y = scroll.y, .w = scroll.h, .h = scroll.h };
         const scroll_w = scroll.w - 2 * b.w;
         scroll_step = @min(step, button_pixel_inc);
 
@@ -167,15 +167,15 @@ pub fn doScrollbarH(state: *States, out: *CommandBuffer, scroll_in: Rect, has_sc
     const scroll_ratio = scroll.w / target;
     var scroll_off = scroll_offset / target;
 
-    var cursor = Rect{
+    var cursor: Rect = .{
         .w = @max(scroll_ratio * scroll.w - (2 * style.border + 2 * style.padding.x), 0),
         .x = scroll.x + scroll_off * scroll.w + style.border + style.padding.x,
         .h = scroll.h - (2 * style.border + 2 * style.padding.y),
         .y = scroll.y + style.border + style.padding.y,
     };
 
-    const empty_west = Rect{ .x = scroll.x, .y = scroll.y, .w = @max(cursor.x - scroll.x, 0), .h = scroll.h };
-    const empty_east = Rect{ .x = cursor.x + cursor.w, .y = scroll.y, .w = @max((scroll.x + scroll.w) - (cursor.x + cursor.w), 0), .h = scroll.h };
+    const empty_west: Rect = .{ .x = scroll.x, .y = scroll.y, .w = @max(cursor.x - scroll.x, 0), .h = scroll.h };
+    const empty_east: Rect = .{ .x = cursor.x + cursor.w, .y = scroll.y, .w = @max((scroll.x + scroll.w) - (cursor.x + cursor.w), 0), .h = scroll.h };
 
     scroll_offset = scrollbarBehavior(state, in, has_scrolling, scroll, cursor, empty_west, empty_east, scroll_offset, target, scroll_step, .horizontal);
     scroll_off = scroll_offset / target;
@@ -192,23 +192,23 @@ pub fn doScrollbarH(state: *States, out: *CommandBuffer, scroll_in: Rect, has_sc
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "vertical scrollbar hidden when content fits" {
     const style = style_mod.Style.default().scrollv;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var state: States = .{};
     // target (50) <= height (100): nothing to scroll
-    const off = try doScrollbarV(&state, &buf, Rect.init(0, 0, 10, 100), false, 0, 50, 10, 1, &style, null, &test_font);
+    const off = try doScrollbarV(&state, &buf, .init(0, 0, 10, 100), false, 0, 50, 10, 1, &style, null, &test_font);
     try std.testing.expectEqual(@as(f32, 0), off);
     try std.testing.expectEqual(@as(usize, 0), buf.items().len);
 }
 
 test "mouse wheel advances the scroll offset" {
     const style = style_mod.Style.default().scrollv;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -218,6 +218,6 @@ test "mouse wheel advances the scroll offset" {
     in.scroll(.{ .x = 0, .y = -1 }); // wheel down
 
     var state: States = .{};
-    const off = try doScrollbarV(&state, &buf, Rect.init(0, 0, 10, 100), true, 0, 400, 30, 3, &style, &in, &test_font);
+    const off = try doScrollbarV(&state, &buf, .init(0, 0, 10, 100), true, 0, 400, 30, 3, &style, &in, &test_font);
     try std.testing.expect(off > 0);
 }

@@ -52,7 +52,7 @@ fn drawToggle(out: *CommandBuffer, t: ToggleType, state: States, style: *const S
         style.text_normal;
     txt = txt.factor(style.color_factor);
 
-    try text_widget.widgetText(out, label, string, text_alignment, Vec2.init(0, 0), style.text_background, txt, font);
+    try text_widget.widgetText(out, label, string, text_alignment, .init(0, 0), style.text_background, txt, font);
 
     // selector background
     switch (bg) {
@@ -94,15 +94,15 @@ pub fn doToggle(state: *States, out: *CommandBuffer, r_in: Rect, active: *bool, 
     r.w = @max(r.w, font.height + 2 * style.padding.x);
     r.h = @max(r.h, font.height + 2 * style.padding.y);
 
-    const bounds = Rect{
+    const bounds: Rect = .{
         .x = r.x - style.touch_padding.x,
         .y = r.y - style.touch_padding.y,
         .w = r.w + 2 * style.touch_padding.x,
         .h = r.h + 2 * style.touch_padding.y,
     };
 
-    var select = Rect{ .w = font.height, .h = font.height };
-    var label = Rect{};
+    var select: Rect = .{ .w = font.height, .h = font.height };
+    var label: Rect = .{};
     if (widget_alignment.right) {
         select.x = r.x + r.w - font.height;
         label.x = r.x;
@@ -127,7 +127,7 @@ pub fn doToggle(state: *States, out: *CommandBuffer, r_in: Rect, active: *bool, 
     label.y = select.y;
     label.h = select.w;
 
-    const cursor = Rect{
+    const cursor: Rect = .{
         .x = select.x + style.padding.x + style.border,
         .y = select.y + style.padding.y + style.border,
         .w = select.w - (2 * style.padding.x + 2 * style.border),
@@ -149,7 +149,7 @@ pub fn doToggle(state: *States, out: *CommandBuffer, r_in: Rect, active: *bool, 
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "checkbox toggles on click" {
     var in: Input = .{};
@@ -158,13 +158,13 @@ test "checkbox toggles on click" {
     in.button(.left, 6, 6, true);
 
     const style = style_mod.Style.default().checkbox;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
     var state: States = .{};
     var active = false;
-    const changed = try doToggle(&state, &buf, Rect.init(0, 0, 120, 20), &active, "on", .check, &style, &in, &test_font, Align.text_left, Align.text_left);
+    const changed = try doToggle(&state, &buf, .init(0, 0, 120, 20), &active, "on", .check, &style, &in, &test_font, Align.text_left, Align.text_left);
     try std.testing.expect(changed);
     try std.testing.expect(active);
 }
@@ -175,13 +175,13 @@ test "checkbox unchanged when not clicked" {
     in.mouse.pos = .{ .x = 500, .y = 500 };
 
     const style = style_mod.Style.default().checkbox;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
     var state: States = .{};
     var active = true;
-    const changed = try doToggle(&state, &buf, Rect.init(0, 0, 120, 20), &active, "on", .check, &style, &in, &test_font, Align.text_left, Align.text_left);
+    const changed = try doToggle(&state, &buf, .init(0, 0, 120, 20), &active, "on", .check, &style, &in, &test_font, Align.text_left, Align.text_left);
     try std.testing.expect(!changed);
     try std.testing.expect(active);
 }

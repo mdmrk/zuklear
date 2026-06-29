@@ -281,7 +281,7 @@ pub const TextEdit = struct {
 
     /// Insert/replace `input` (UTF-8) at the cursor (`nk_textedit_text`).
     pub fn insert(e: *TextEdit, input: []const u8) !void {
-        var it = unicode.Utf8Iterator{ .bytes = input, .i = 0 };
+        var it: unicode.Utf8Iterator = .{ .bytes = input, .i = 0 };
         while (it.nextCodepointSlice()) |glyph| {
             const rune = unicode.utf8Decode(glyph) catch 0xFFFD;
             const allowed = rune != 127 and

@@ -495,10 +495,10 @@ pub const Style = struct {
 
         // A button styled like a slider/scrollbar increment button (literal
         // greys, not table-derived, matching upstream).
-        const small_button = StyleButton{
-            .normal = sc(Color.rgb(40, 40, 40)),
-            .hover = sc(Color.rgb(42, 42, 42)),
-            .active = sc(Color.rgb(44, 44, 44)),
+        const small_button: StyleButton = .{
+            .normal = sc(.rgb(40, 40, 40)),
+            .hover = sc(.rgb(42, 42, 42)),
+            .active = sc(.rgb(44, 44, 44)),
             .border_color = Color.rgb(65, 65, 65),
             .text_background = Color.rgb(40, 40, 40),
             .text_normal = Color.rgb(175, 175, 175),
@@ -511,7 +511,7 @@ pub const Style = struct {
         var scroll_button = small_button;
         scroll_button.padding = Vec2.init(4, 4);
 
-        const scrollbar = StyleScrollbar{
+        const scrollbar: StyleScrollbar = .{
             .normal = sc(col(table, .scrollbar)),
             .hover = sc(col(table, .scrollbar)),
             .active = sc(col(table, .scrollbar)),
@@ -531,7 +531,7 @@ pub const Style = struct {
             .dec_button = scroll_button,
         };
 
-        const edit = StyleEdit{
+        const edit: StyleEdit = .{
             .normal = sc(col(table, .edit)),
             .hover = sc(col(table, .edit)),
             .active = sc(col(table, .edit)),
@@ -556,7 +556,7 @@ pub const Style = struct {
             .rounding = 0,
         };
 
-        const property_button = StyleButton{
+        const property_button: StyleButton = .{
             .normal = sc(col(table, .property)),
             .hover = sc(col(table, .property)),
             .active = sc(col(table, .property)),
@@ -579,7 +579,7 @@ pub const Style = struct {
         property_edit.cursor_size = 8;
         property_edit.border = 0;
 
-        const tab_button = StyleButton{
+        const tab_button: StyleButton = .{
             .normal = sc(col(table, .tab_header)),
             .hover = sc(col(table, .tab_header)),
             .active = sc(col(table, .tab_header)),
@@ -597,7 +597,7 @@ pub const Style = struct {
         node_button.hover = sc(col(table, .window));
         node_button.active = sc(col(table, .window));
 
-        const header_button = StyleButton{
+        const header_button: StyleButton = .{
             .normal = sc(col(table, .header)),
             .hover = sc(col(table, .header)),
             .active = sc(col(table, .header)),
@@ -963,7 +963,7 @@ pub const default_color_table: [color_count]Color = blk: {
 };
 
 test "default theme derives colors from the table" {
-    const s = Style.default();
+    const s: Style = .default();
     try std.testing.expectEqual(Color.rgb(175, 175, 175), s.text.color);
     try std.testing.expectEqual(Color.rgb(50, 50, 50), s.button.normal.color);
     try std.testing.expectEqual(@as(f32, 4.0), s.button.rounding);

@@ -41,7 +41,7 @@ pub fn drawSymbol(out: *CommandBuffer, sym: Symbol, content: Rect, background: C
                 .plus => "+",
                 else => "-",
             };
-            try text_widget.widgetText(out, content, character, Align.text_centered, Vec2.init(0, 0), background, foreground, font);
+            try text_widget.widgetText(out, content, character, Align.text_centered, .init(0, 0), background, foreground, font);
         },
         .rect_solid, .rect_outline => {
             try out.fillRect(content, 0, foreground);
@@ -111,19 +111,19 @@ pub fn drawSymbol(out: *CommandBuffer, sym: Symbol, content: Rect, background: C
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "drawSymbol emits geometry for each family" {
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
-    const r = Rect.init(0, 0, 16, 16);
+    const r: Rect = .init(0, 0, 16, 16);
 
-    try drawSymbol(&buf, .x, r, Color.black, Color.white, 1, &test_font);
-    try drawSymbol(&buf, .triangle_down, r, Color.black, Color.white, 1, &test_font);
-    try drawSymbol(&buf, .circle_solid, r, Color.black, Color.white, 1, &test_font);
-    try drawSymbol(&buf, .plus, r, Color.black, Color.white, 1, &test_font);
-    try drawSymbol(&buf, .none, r, Color.black, Color.white, 1, &test_font);
+    try drawSymbol(&buf, .x, r, .black, .white, 1, &test_font);
+    try drawSymbol(&buf, .triangle_down, r, .black, .white, 1, &test_font);
+    try drawSymbol(&buf, .circle_solid, r, .black, .white, 1, &test_font);
+    try drawSymbol(&buf, .plus, r, .black, .white, 1, &test_font);
+    try drawSymbol(&buf, .none, r, .black, .white, 1, &test_font);
 
     // X = 2 lines, triangle = 1 fill, circle = 1 fill, plus = 1 text, none = 0
     try std.testing.expectEqual(@as(usize, 5), buf.items().len);

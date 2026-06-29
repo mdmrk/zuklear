@@ -29,7 +29,7 @@ fn boolf(b: bool) f32 {
 
 fn knobBehavior(state: *States, in: ?*Input, bounds: Rect, knob_min: f32, knob_max: f32, value_in: f32, knob_step: f32, knob_steps: f32, zero_direction: Heading, dead_zone_percent: f32) f32 {
     var knob_value = value_in;
-    const origin = Vec2.init(bounds.x + bounds.w / 2, bounds.y + bounds.h / 2);
+    const origin: Vec2 = .init(bounds.x + bounds.w / 2, bounds.y + bounds.h / 2);
     state.reset();
 
     const i = in orelse return knob_value;
@@ -99,8 +99,8 @@ fn drawKnob(out: *CommandBuffer, state: States, style: *const StyleKnob, bounds:
     angle += direction_rads[@intFromEnum(zero_direction)];
     if (angle > pi * 2) angle -= pi * 2;
 
-    var start = Vec2.init(bounds.x + half + boolf(angle > pi), bounds.y + half + boolf(angle < pi_half or angle > pi * 1.5));
-    const end = Vec2.init(start.x + half * std.math.cos(angle), start.y + half * std.math.sin(angle));
+    var start: Vec2 = .init(bounds.x + half + boolf(angle > pi), bounds.y + half + boolf(angle < pi_half or angle > pi * 1.5));
+    const end: Vec2 = .init(start.x + half * std.math.cos(angle), start.y + half * std.math.sin(angle));
     start.x = (start.x + end.x) / 2;
     start.y = (start.y + end.y) / 2;
     try out.strokeLine(start.x, start.y, end.x, end.y, style.cursor_width, cursor.factor(style.color_factor));
@@ -135,17 +135,17 @@ pub fn doKnob(state: *States, out: *CommandBuffer, bounds_in: Rect, min: f32, va
 
 test "knob is stable without input and clamps" {
     const style = style_mod.Style.default().knob;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var state: States = .{};
-    const v = try doKnob(&state, &buf, Rect.init(0, 0, 40, 40), 0, 5, 10, 1, .up, 0.2, &style, null);
+    const v = try doKnob(&state, &buf, .init(0, 0, 40, 40), 0, 5, 10, 1, .up, 0.2, &style, null);
     try std.testing.expectEqual(@as(f32, 5), v);
 }
 
 test "scrolling over the knob changes the value" {
     const style = style_mod.Style.default().knob;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var in: Input = .{};
@@ -153,6 +153,6 @@ test "scrolling over the knob changes the value" {
     in.mouse.pos = .{ .x = 20, .y = 20 }; // over the knob center
     in.scroll(.{ .x = 0, .y = 1 }); // wheel up
     var state: States = .{};
-    const v = try doKnob(&state, &buf, Rect.init(0, 0, 40, 40), 0, 5, 10, 1, .up, 0.2, &style, &in);
+    const v = try doKnob(&state, &buf, .init(0, 0, 40, 40), 0, 5, 10, 1, .up, 0.2, &style, &in);
     try std.testing.expectEqual(@as(f32, 6), v);
 }

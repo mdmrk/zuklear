@@ -474,7 +474,7 @@ pub const DrawList = struct {
             switch (cmd) {
                 .scissor => |s| {
                     try dl.flush(clip, cfg.texture);
-                    clip = Rect.initI(s.x, s.y, s.w, s.h);
+                    clip = .initI(s.x, s.y, s.w, s.h);
                 },
                 .rect_filled => |c| {
                     try dl.pathRect(@floatFromInt(c.x), @floatFromInt(c.y), @floatFromInt(c.w), @floatFromInt(c.h), @floatFromInt(c.rounding));
@@ -564,10 +564,10 @@ pub const DrawList = struct {
 // --- tests ---------------------------------------------------------------
 
 test "convert emits a quad per filled rect (no AA)" {
-    var dl = DrawList.init(std.testing.allocator);
+    var dl: DrawList = .init(std.testing.allocator);
     defer dl.deinit();
     var cmds = [_]Command{
-        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = Color.rgb(255, 0, 0) } },
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = .rgb(255, 0, 0) } },
     };
     try dl.convert(&cmds, .{ .shape_aa = false });
     try std.testing.expectEqual(@as(usize, 4), dl.vertices.items.len);
@@ -578,10 +578,10 @@ test "convert emits a quad per filled rect (no AA)" {
 }
 
 test "AA fill adds a transparent fringe ring around the solid shape" {
-    var dl = DrawList.init(std.testing.allocator);
+    var dl: DrawList = .init(std.testing.allocator);
     defer dl.deinit();
     var cmds = [_]Command{
-        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = Color.rgb(255, 0, 0) } },
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = .rgb(255, 0, 0) } },
     };
     try dl.convert(&cmds, .{ .shape_aa = true });
     // 4 path points -> 2 vertices each (inner solid + outer transparent).
@@ -594,10 +594,10 @@ test "AA fill adds a transparent fringe ring around the solid shape" {
 }
 
 test "AA stroke feathers a thin line into transparent edges" {
-    var dl = DrawList.init(std.testing.allocator);
+    var dl: DrawList = .init(std.testing.allocator);
     defer dl.deinit();
     var cmds = [_]Command{
-        .{ .line = .{ .line_thickness = 1, .begin = .{ .x = 0, .y = 0 }, .end = .{ .x = 10, .y = 0 }, .color = Color.rgb(0, 255, 0) } },
+        .{ .line = .{ .line_thickness = 1, .begin = .{ .x = 0, .y = 0 }, .end = .{ .x = 10, .y = 0 }, .color = .rgb(0, 255, 0) } },
     };
     try dl.convert(&cmds, .{ .line_aa = true });
     // thin AA line: 2 points * 3 vertices (center solid + 2 transparent).
@@ -607,16 +607,16 @@ test "AA stroke feathers a thin line into transparent edges" {
 }
 
 test "image gets its own batch with its texture" {
-    var dl = DrawList.init(std.testing.allocator);
+    var dl: DrawList = .init(std.testing.allocator);
     defer dl.deinit();
     const image_mod = @import("../image.zig");
-    var img = image_mod.Image.fromId(7);
+    var img: image_mod.Image = .fromId(7);
     img.w = 64;
     img.h = 64;
     img.region = .{ 0, 0, 32, 32 };
     var cmds = [_]Command{
-        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = Color.rgb(1, 2, 3) } },
-        .{ .image = .{ .x = 0, .y = 0, .w = 32, .h = 32, .img = img, .col = Color.white } },
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 10, .h = 10, .color = .rgb(1, 2, 3) } },
+        .{ .image = .{ .x = 0, .y = 0, .w = 32, .h = 32, .img = img, .col = .white } },
     };
     try dl.convert(&cmds, .{ .texture = .{ .id = 1 } });
     // two batches: the solid (texture 1) and the image (texture 7)
@@ -626,13 +626,13 @@ test "image gets its own batch with its texture" {
 }
 
 test "scissor splits into separate draw commands" {
-    var dl = DrawList.init(std.testing.allocator);
+    var dl: DrawList = .init(std.testing.allocator);
     defer dl.deinit();
     var cmds = [_]Command{
         .{ .scissor = .{ .x = 0, .y = 0, .w = 50, .h = 50 } },
-        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 5, .h = 5, .color = Color.rgb(1, 2, 3) } },
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 5, .h = 5, .color = .rgb(1, 2, 3) } },
         .{ .scissor = .{ .x = 0, .y = 0, .w = 20, .h = 20 } },
-        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 5, .h = 5, .color = Color.rgb(1, 2, 3) } },
+        .{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 5, .h = 5, .color = .rgb(1, 2, 3) } },
     };
     try dl.convert(&cmds, .{});
     try std.testing.expectEqual(@as(usize, 2), dl.commands.items.len);

@@ -144,7 +144,7 @@ pub const Rasterizer = struct {
         while (y <= maxy) : (y += 1) {
             var x: i32 = minx;
             while (x <= maxx) : (x += 1) {
-                const p = Vec2i{ .x = @intCast(x), .y = @intCast(y) };
+                const p: Vec2i = .{ .x = @intCast(x), .y = @intCast(y) };
                 const w0 = edge(b, cc, p);
                 const w1 = edge(cc, a, p);
                 const w2 = edge(a, b, p);
@@ -208,12 +208,12 @@ pub const Rasterizer = struct {
     const arc_segments = 24;
 
     fn fillArc(r: *Rasterizer, cx: f32, cy: f32, radius: f32, a0: f32, a1: f32, col: Color) void {
-        const center = Vec2i{ .x = qShort(cx), .y = qShort(cy) };
+        const center: Vec2i = .{ .x = qShort(cx), .y = qShort(cy) };
         var prev: Vec2i = undefined;
         var i: i32 = 0;
         while (i <= arc_segments) : (i += 1) {
             const a = a0 + (a1 - a0) * (@as(f32, @floatFromInt(i)) / arc_segments);
-            const cur = Vec2i{ .x = qShort(cx + @cos(a) * radius), .y = qShort(cy + @sin(a) * radius) };
+            const cur: Vec2i = .{ .x = qShort(cx + @cos(a) * radius), .y = qShort(cy + @sin(a) * radius) };
             if (i > 0) r.fillTriangle(center, prev, cur, col);
             prev = cur;
         }
@@ -224,7 +224,7 @@ pub const Rasterizer = struct {
         var i: i32 = 0;
         while (i <= arc_segments) : (i += 1) {
             const a = a0 + (a1 - a0) * (@as(f32, @floatFromInt(i)) / arc_segments);
-            const cur = Vec2i{ .x = qShort(cx + @cos(a) * radius), .y = qShort(cy + @sin(a) * radius) };
+            const cur: Vec2i = .{ .x = qShort(cx + @cos(a) * radius), .y = qShort(cy + @sin(a) * radius) };
             if (prev) |p| r.line(p.x, p.y, cur.x, cur.y, qShort(thickness), col);
             prev = cur;
         }
@@ -241,7 +241,7 @@ pub const Rasterizer = struct {
             const w1 = 3 * it * it * t;
             const w2 = 3 * it * t * t;
             const w3 = t * t * t;
-            const cur = Vec2i{
+            const cur: Vec2i = .{
                 .x = qShort(w0 * f(p0.x) + w1 * f(c0.x) + w2 * f(c1.x) + w3 * f(p1.x)),
                 .y = qShort(w0 * f(p0.y) + w1 * f(c0.y) + w2 * f(c1.y) + w3 * f(p1.y)),
             };
@@ -261,7 +261,7 @@ pub const Rasterizer = struct {
     fn drawText(r: *Rasterizer, cmd: command.Text) void {
         const scale = builtin_font.scaleFor(cmd.height);
         var pen_x: i32 = cmd.x;
-        var it = std.unicode.Utf8Iterator{ .bytes = cmd.string, .i = 0 };
+        var it: std.unicode.Utf8Iterator = .{ .bytes = cmd.string, .i = 0 };
         while (it.nextCodepoint()) |cp| {
             const bmp = builtin_font.glyphBitmap(cp);
             for (bmp, 0..) |bits, row| {
@@ -323,10 +323,10 @@ pub const Rasterizer = struct {
 
 test "fills a clipped rectangle" {
     var pixels: [16 * 16]u32 = undefined;
-    var surface = Surface{ .pixels = &pixels, .width = 16, .height = 16 };
-    surface.clear(Color.black);
+    var surface: Surface = .{ .pixels = &pixels, .width = 16, .height = 16 };
+    surface.clear(.black);
 
-    var ras = Rasterizer.init(&surface);
+    var ras: Rasterizer = .init(&surface);
     ras.run(.{ .scissor = .{ .x = 0, .y = 0, .w = 8, .h = 16 } });
     ras.run(.{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 16, .h = 16, .color = Color.rgb(255, 0, 0) } });
 
@@ -337,16 +337,16 @@ test "fills a clipped rectangle" {
 
 test "arc and curve write pixels" {
     var pixels: [64 * 64]u32 = undefined;
-    var surface = Surface{ .pixels = &pixels, .width = 64, .height = 64 };
-    surface.clear(Color.black);
-    var ras = Rasterizer.init(&surface);
+    var surface: Surface = .{ .pixels = &pixels, .width = 64, .height = 64 };
+    surface.clear(.black);
+    var ras: Rasterizer = .init(&surface);
     ras.run(.{ .arc_filled = .{ .cx = 32, .cy = 32, .r = 20, .a = .{ 0, std.math.pi }, .color = Color.rgb(0, 255, 0) } });
     ras.run(.{ .curve = .{ .line_thickness = 2, .begin = .{ .x = 2, .y = 2 }, .ctrl = .{ .{ .x = 20, .y = 60 }, .{ .x = 40, .y = 0 } }, .end = .{ .x = 60, .y = 40 }, .color = Color.rgb(255, 0, 0) } });
     var green: usize = 0;
     var red: usize = 0;
     for (pixels) |p| {
-        if (p == pack(Color.rgb(0, 255, 0))) green += 1;
-        if (p == pack(Color.rgb(255, 0, 0))) red += 1;
+        if (p == pack(.rgb(0, 255, 0))) green += 1;
+        if (p == pack(.rgb(255, 0, 0))) red += 1;
     }
     try std.testing.expect(green > 0);
     try std.testing.expect(red > 0);
@@ -354,9 +354,9 @@ test "arc and curve write pixels" {
 
 test "alpha blends over the background" {
     var pixels: [4]u32 = undefined;
-    var surface = Surface{ .pixels = &pixels, .width = 2, .height = 2 };
-    surface.clear(Color.black);
-    var ras = Rasterizer.init(&surface);
+    var surface: Surface = .{ .pixels = &pixels, .width = 2, .height = 2 };
+    surface.clear(.black);
+    var ras: Rasterizer = .init(&surface);
     ras.run(.{ .rect_filled = .{ .rounding = 0, .x = 0, .y = 0, .w = 2, .h = 2, .color = .{ .r = 255, .g = 255, .b = 255, .a = 128 } } });
     // ~50% white over black -> grey
     const g = pixels[0] & 0xFF;

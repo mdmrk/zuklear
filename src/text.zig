@@ -41,7 +41,7 @@ pub fn widgetText(
     if (!a.left and !a.centered and !a.right) a.left = true;
     if (!a.top and !a.middle and !a.bottom) a.top = true;
 
-    var label = Rect{};
+    var label: Rect = .{};
 
     // horizontal
     if (a.left) {
@@ -74,7 +74,7 @@ pub fn widgetText(
 }
 
 test "widgetText emits a left-aligned label" {
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -84,16 +84,16 @@ test "widgetText emits a left-aligned label" {
             return @as(f32, @floatFromInt(t.len)) * 7.0;
         }
     }.f;
-    const font = UserFont{ .height = 13, .width = &widthFn };
+    const font: UserFont = .{ .height = 13, .width = &widthFn };
 
-    try widgetText(&buf, Rect.init(0, 0, 100, 20), "hi", .{ .left = true, .middle = true }, Vec2.init(2, 2), Color{ .a = 0 }, Color.white, &font);
+    try widgetText(&buf, .init(0, 0, 100, 20), "hi", .{ .left = true, .middle = true }, .init(2, 2), .{ .a = 0 }, .white, &font);
     const t = buf.items()[0].text;
     try std.testing.expectEqualStrings("hi", t.string);
     try std.testing.expectEqual(@as(i16, 2), t.x); // left padding
 }
 
 test "widgetText centers horizontally" {
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -103,10 +103,10 @@ test "widgetText centers horizontally" {
             return @as(f32, @floatFromInt(t.len)) * 10.0;
         }
     }.f;
-    const font = UserFont{ .height = 13, .width = &widthFn };
+    const font: UserFont = .{ .height = 13, .width = &widthFn };
 
     // "ab" is 20px wide in a 100px box -> roughly centered (x > left edge)
-    try widgetText(&buf, Rect.init(0, 0, 100, 20), "ab", .{ .centered = true, .middle = true }, Vec2.init(0, 0), Color{ .a = 0 }, Color.white, &font);
+    try widgetText(&buf, .init(0, 0, 100, 20), "ab", .{ .centered = true, .middle = true }, .init(0, 0), .{ .a = 0 }, .white, &font);
     const t = buf.items()[0].text;
     try std.testing.expect(t.x > 30 and t.x < 50);
 }

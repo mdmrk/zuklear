@@ -245,7 +245,7 @@ test "rgbaF saturates and scales" {
 }
 
 test "u32 roundtrip" {
-    const c = Color{ .r = 0x12, .g = 0x34, .b = 0x56, .a = 0x78 };
+    const c: Color = .{ .r = 0x12, .g = 0x34, .b = 0x56, .a = 0x78 };
     try std.testing.expectEqual(@as(u32, 0x78563412), c.toU32());
     try std.testing.expectEqual(c, Color.fromU32(c.toU32()));
 }
@@ -260,7 +260,7 @@ test "hex parse and format" {
 
 test "rgb factor" {
     try std.testing.expectEqual(Color{ .r = 100, .g = 50, .b = 0, .a = 200 }, (Color{ .r = 200, .g = 100, .b = 0, .a = 200 }).factor(0.5));
-    const c = Color{ .r = 1, .g = 2, .b = 3, .a = 4 };
+    const c: Color = .{ .r = 1, .g = 2, .b = 3, .a = 4 };
     try std.testing.expectEqual(c, c.factor(1.0));
 }
 
@@ -273,7 +273,7 @@ test "hsv to rgb primaries" {
 }
 
 test "rgb<->hsv roundtrip stays close" {
-    const original = Color{ .r = 200, .g = 120, .b = 40, .a = 255 };
+    const original: Color = .{ .r = 200, .g = 120, .b = 40, .a = 255 };
     const hsva = original.toHsva();
     const back = Colorf.fromHsva(hsva.h, hsva.s, hsva.v, hsva.a).toColor();
     try std.testing.expectApproxEqAbs(@as(f32, 200), @as(f32, @floatFromInt(back.r)), 1.5);

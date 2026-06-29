@@ -51,7 +51,7 @@ fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelecta
 /// whether it changed (`nk_do_selectable`).
 pub fn doSelectable(state: *States, out: *CommandBuffer, bounds: Rect, str: []const u8, alignment: Align, value: *bool, style: *const StyleSelectable, in: ?*const Input, font: *const UserFont) !bool {
     const old = value.*;
-    const touch = Rect{
+    const touch: Rect = .{
         .x = bounds.x - style.touch_padding.x,
         .y = bounds.y - style.touch_padding.y,
         .w = bounds.w + style.touch_padding.x * 2,
@@ -68,11 +68,11 @@ pub fn doSelectable(state: *States, out: *CommandBuffer, bounds: Rect, str: []co
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "selectable toggles on click" {
     const style = style_mod.Style.default().selectable;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -83,7 +83,7 @@ test "selectable toggles on click" {
 
     var state: States = .{};
     var value = false;
-    const changed = try doSelectable(&state, &buf, Rect.init(0, 0, 100, 20), "item", Align.text_left, &value, &style, &in, &test_font);
+    const changed = try doSelectable(&state, &buf, .init(0, 0, 100, 20), "item", Align.text_left, &value, &style, &in, &test_font);
     try std.testing.expect(changed);
     try std.testing.expect(value);
 }

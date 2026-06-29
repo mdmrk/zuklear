@@ -383,17 +383,17 @@ pub const CommandBuffer = struct {
         };
 
         // rows: top (t), middle (rh-t-b), bottom (b); cols: left (l), mid, right (r)
-        try Local.part(b, slc.img, rx, ry, l, t, Rect.init(r.x, r.y, l, t), col);
-        try Local.part(b, slc.img, rx + l, ry, rw - l - rr, t, Rect.init(r.x + l, r.y, r.w - l - rr, t), col);
-        try Local.part(b, slc.img, rx + rw - rr, ry, rr, t, Rect.init(r.x + r.w - rr, r.y, rr, t), col);
+        try Local.part(b, slc.img, rx, ry, l, t, .init(r.x, r.y, l, t), col);
+        try Local.part(b, slc.img, rx + l, ry, rw - l - rr, t, .init(r.x + l, r.y, r.w - l - rr, t), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry, rr, t, .init(r.x + r.w - rr, r.y, rr, t), col);
 
-        try Local.part(b, slc.img, rx, ry + t, l, rh - t - bb, Rect.init(r.x, r.y + t, l, r.h - t - bb), col);
-        try Local.part(b, slc.img, rx + l, ry + t, rw - l - rr, rh - t - bb, Rect.init(r.x + l, r.y + t, r.w - l - rr, r.h - t - bb), col);
-        try Local.part(b, slc.img, rx + rw - rr, ry + t, rr, rh - t - bb, Rect.init(r.x + r.w - rr, r.y + t, rr, r.h - t - bb), col);
+        try Local.part(b, slc.img, rx, ry + t, l, rh - t - bb, .init(r.x, r.y + t, l, r.h - t - bb), col);
+        try Local.part(b, slc.img, rx + l, ry + t, rw - l - rr, rh - t - bb, .init(r.x + l, r.y + t, r.w - l - rr, r.h - t - bb), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry + t, rr, rh - t - bb, .init(r.x + r.w - rr, r.y + t, rr, r.h - t - bb), col);
 
-        try Local.part(b, slc.img, rx, ry + rh - bb, l, bb, Rect.init(r.x, r.y + r.h - bb, l, bb), col);
-        try Local.part(b, slc.img, rx + l, ry + rh - bb, rw - l - rr, bb, Rect.init(r.x + l, r.y + r.h - bb, r.w - l - rr, bb), col);
-        try Local.part(b, slc.img, rx + rw - rr, ry + rh - bb, rr, bb, Rect.init(r.x + r.w - rr, r.y + r.h - bb, rr, bb), col);
+        try Local.part(b, slc.img, rx, ry + rh - bb, l, bb, .init(r.x, r.y + r.h - bb, l, bb), col);
+        try Local.part(b, slc.img, rx + l, ry + rh - bb, rw - l - rr, bb, .init(r.x + l, r.y + r.h - bb, r.w - l - rr, bb), col);
+        try Local.part(b, slc.img, rx + rw - rr, ry + rh - bb, rr, bb, .init(r.x + r.w - rr, r.y + r.h - bb, rr, bb), col);
     }
 
     /// Record a renderer-defined custom draw callback (`nk_push_custom`).
@@ -411,9 +411,9 @@ pub const CommandBuffer = struct {
 };
 
 test "records a filled rect with quantized geometry" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    try b.fillRect(Rect.init(10.7, 20.2, 100, 50), 4, Color.rgb(255, 0, 0));
+    try b.fillRect(.init(10.7, 20.2, 100, 50), 4, .rgb(255, 0, 0));
     try std.testing.expectEqual(@as(usize, 1), b.items().len);
     const c = b.items()[0].rect_filled;
     try std.testing.expectEqual(@as(i16, 10), c.x);
@@ -423,20 +423,20 @@ test "records a filled rect with quantized geometry" {
 }
 
 test "transparent and degenerate shapes are dropped" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    try b.fillRect(Rect.init(0, 0, 100, 50), 0, Color{ .r = 1, .g = 2, .b = 3, .a = 0 });
-    try b.fillRect(Rect.init(0, 0, 0, 50), 0, Color.rgb(1, 2, 3));
-    try b.strokeLine(0, 0, 10, 10, 0, Color.rgb(1, 2, 3)); // zero thickness
+    try b.fillRect(.init(0, 0, 100, 50), 0, .{ .r = 1, .g = 2, .b = 3, .a = 0 });
+    try b.fillRect(.init(0, 0, 0, 50), 0, .rgb(1, 2, 3));
+    try b.strokeLine(0, 0, 10, 10, 0, .rgb(1, 2, 3)); // zero thickness
     try std.testing.expectEqual(@as(usize, 0), b.items().len);
 }
 
 test "clipping drops out-of-bounds shapes" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    try b.pushScissor(Rect.init(0, 0, 50, 50));
-    try b.fillRect(Rect.init(100, 100, 10, 10), 0, Color.rgb(1, 2, 3)); // outside clip
-    try b.fillRect(Rect.init(10, 10, 10, 10), 0, Color.rgb(1, 2, 3)); // inside clip
+    try b.pushScissor(.init(0, 0, 50, 50));
+    try b.fillRect(.init(100, 100, 10, 10), 0, .rgb(1, 2, 3)); // outside clip
+    try b.fillRect(.init(10, 10, 10, 10), 0, .rgb(1, 2, 3)); // inside clip
     // scissor + the one inside rect.
     try std.testing.expectEqual(@as(usize, 2), b.items().len);
     try std.testing.expect(b.items()[0] == .scissor);
@@ -447,39 +447,39 @@ fn testWidth(_: Handle, _: f32, text: []const u8) f32 {
 }
 
 test "drawText clamps to width and owns its copy" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    const f = UserFont{ .height = 12, .width = &testWidth };
+    const f: UserFont = .{ .height = 12, .width = &testWidth };
     // "hello" is 50px; a 25px-wide rect keeps a 3-char prefix.
-    try b.drawText(Rect.init(0, 0, 25, 14), "hello", &f, Color{}, Color.rgb(255, 255, 255));
+    try b.drawText(.init(0, 0, 25, 14), "hello", &f, .{}, .rgb(255, 255, 255));
     const t = b.items()[0].text;
     try std.testing.expectEqualStrings("hel", t.string);
     try std.testing.expectEqual(@as(f32, 12), t.height);
 }
 
 test "drawText with fully transparent colors is dropped" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    const f = UserFont{ .height = 12, .width = &testWidth };
-    const transparent = Color{ .a = 0 };
-    try b.drawText(Rect.init(0, 0, 100, 14), "hi", &f, transparent, transparent);
+    const f: UserFont = .{ .height = 12, .width = &testWidth };
+    const transparent: Color = .{ .a = 0 };
+    try b.drawText(.init(0, 0, 100, 14), "hi", &f, transparent, transparent);
     try std.testing.expectEqual(@as(usize, 0), b.items().len);
 }
 
 test "drawImage records tinted image" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
-    try b.drawImage(Rect.init(1, 2, 3, 4), Image.fromId(9), Color.rgb(10, 20, 30));
+    try b.drawImage(.init(1, 2, 3, 4), .fromId(9), .rgb(10, 20, 30));
     const c = b.items()[0].image;
     try std.testing.expectEqual(@as(i32, 9), c.img.handle.id);
     try std.testing.expectEqual(@as(u16, 3), c.w);
 }
 
 test "polygon owns its points and reset frees them" {
-    var b = CommandBuffer.init(std.testing.allocator);
+    var b: CommandBuffer = .init(std.testing.allocator);
     defer b.deinit();
     const pts = [_]Vec2{ .{ .x = 0, .y = 0 }, .{ .x = 10, .y = 0 }, .{ .x = 5, .y = 8 } };
-    try b.fillPolygon(&pts, Color.rgb(1, 2, 3));
+    try b.fillPolygon(&pts, .rgb(1, 2, 3));
     try std.testing.expectEqual(@as(usize, 3), b.items()[0].polygon_filled.points.len);
     b.reset(); // frees the points slice; no leak under testing.allocator
     try std.testing.expectEqual(@as(usize, 0), b.items().len);

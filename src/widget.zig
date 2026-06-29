@@ -44,7 +44,7 @@ test "States reset keeps modified bit" {
     try std.testing.expect(s.inactive);
     try std.testing.expect(s.modified);
 
-    var s2 = States{ .hover = true };
+    var s2: States = .{ .hover = true };
     s2.reset();
     try std.testing.expect(s2.inactive);
     try std.testing.expect(!s2.modified);

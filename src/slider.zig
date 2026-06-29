@@ -59,13 +59,13 @@ fn drawSlider(out: *CommandBuffer, state: States, style: *const StyleSlider, bou
     const bar_color = if (state.actived) style.bar_active else if (state.hover) style.bar_hover else style.bar_normal;
     const cursor = if (state.actived) style.cursor_active else if (state.hover) style.cursor_hover else style.cursor_normal;
 
-    const bar = Rect{
+    const bar: Rect = .{
         .x = bounds.x,
         .y = bounds.y + bounds.h * 0.5 - style.bar_height * 0.5,
         .w = bounds.w,
         .h = style.bar_height,
     };
-    const fill = Rect{
+    const fill: Rect = .{
         .x = bar.x,
         .y = bar.y,
         .w = visual_cursor.x + 0.5 * visual_cursor.w - bar.x,
@@ -112,14 +112,14 @@ pub fn doSlider(state: *States, out: *CommandBuffer, bounds_in: Rect, min: f32, 
     const slider_steps = slider_range / step;
     const cursor_offset = (slider_value - slider_min) / step;
 
-    var logical_cursor = Rect{
+    var logical_cursor: Rect = .{
         .h = bounds.h,
         .w = bounds.w / slider_steps,
         .y = bounds.y,
     };
     logical_cursor.x = bounds.x + logical_cursor.w * cursor_offset;
 
-    var visual_cursor = Rect{
+    var visual_cursor: Rect = .{
         .h = style.cursor_size.y,
         .w = style.cursor_size.x,
         .y = bounds.y + bounds.h * 0.5 - style.cursor_size.y * 0.5,
@@ -140,22 +140,22 @@ pub fn doSlider(state: *States, out: *CommandBuffer, bounds_in: Rect, min: f32, 
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "slider clamps value and is stable without input" {
     const style = style_mod.Style.default().slider;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
     var state: States = .{};
-    const v = try doSlider(&state, &buf, Rect.init(0, 0, 200, 20), 0, 200, 10, 1, &style, null, &test_font);
+    const v = try doSlider(&state, &buf, .init(0, 0, 200, 20), 0, 200, 10, 1, &style, null, &test_font);
     try std.testing.expectEqual(@as(f32, 10), v); // clamped to max
 }
 
 test "dragging the slider cursor changes the value" {
     const style = style_mod.Style.default().slider;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -168,6 +168,6 @@ test "dragging the slider cursor changes the value" {
     in.mouse.delta = .{ .x = 142, .y = 0 };
 
     var state: States = .{};
-    const v = try doSlider(&state, &buf, Rect.init(0, 0, 200, 20), 0, 0, 10, 1, &style, &in, &test_font);
+    const v = try doSlider(&state, &buf, .init(0, 0, 200, 20), 0, 0, 10, 1, &style, &in, &test_font);
     try std.testing.expect(v > 0);
 }

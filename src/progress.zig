@@ -69,7 +69,7 @@ fn drawProgress(out: *CommandBuffer, state: States, style: *const StyleProgress,
 /// Lay out, interact with and draw a progress bar, returning the value
 /// (`nk_do_progress`).
 pub fn doProgress(state: *States, out: *CommandBuffer, bounds: Rect, value: usize, max: usize, modifiable: bool, style: *const StyleProgress, in: ?*Input) !usize {
-    var cursor = bounds.pad(Vec2.init(style.padding.x + style.border, style.padding.y + style.border));
+    var cursor = bounds.pad(.init(style.padding.x + style.border, style.padding.y + style.border));
     const prog_scale: f32 = if (max == 0) 0 else @as(f32, @floatFromInt(value)) / @as(f32, @floatFromInt(max));
 
     const prog_value = progressBehavior(state, in, bounds, cursor, max, @min(value, max), modifiable);
@@ -83,17 +83,17 @@ pub fn doProgress(state: *States, out: *CommandBuffer, bounds: Rect, value: usiz
 
 test "progress reports value clamped to max" {
     const style = style_mod.Style.default().progress;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var state: States = .{};
-    const v = try doProgress(&state, &buf, Rect.init(0, 0, 200, 20), 150, 100, false, &style, null);
+    const v = try doProgress(&state, &buf, .init(0, 0, 200, 20), 150, 100, false, &style, null);
     try std.testing.expectEqual(@as(usize, 100), v);
 }
 
 test "non-modifiable progress ignores input" {
     const style = style_mod.Style.default().progress;
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var in: Input = .{};
@@ -101,6 +101,6 @@ test "non-modifiable progress ignores input" {
     in.mouse.pos = .{ .x = 100, .y = 10 };
     in.button(.left, 100, 10, true);
     var state: States = .{};
-    const v = try doProgress(&state, &buf, Rect.init(0, 0, 200, 20), 30, 100, false, &style, &in);
+    const v = try doProgress(&state, &buf, .init(0, 0, 200, 20), 30, 100, false, &style, &in);
     try std.testing.expectEqual(@as(usize, 30), v);
 }

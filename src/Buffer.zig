@@ -204,7 +204,7 @@ pub fn info(b: *const Buffer) Status {
 
 test "fixed buffer front alloc and overflow" {
     var mem: [16]u8 = undefined;
-    var b = Buffer.initFixed(&mem);
+    var b: Buffer = .initFixed(&mem);
     const a = try b.alloc(.front, 8, 0);
     try std.testing.expectEqual(@as(usize, 8), a.len);
     _ = try b.alloc(.front, 8, 0);
@@ -223,7 +223,7 @@ test "dynamic buffer grows" {
 
 test "back allocation grows downward" {
     var mem: [32]u8 = undefined;
-    var b = Buffer.initFixed(&mem);
+    var b: Buffer = .initFixed(&mem);
     const front = try b.alloc(.front, 8, 0);
     const back = try b.alloc(.back, 8, 0);
     try std.testing.expectEqual(@as(usize, 8), b.allocated);
@@ -235,7 +235,7 @@ test "back allocation grows downward" {
 
 test "alignment pads allocation" {
     var mem: [64]u8 = undefined;
-    var b = Buffer.initFixed(&mem);
+    var b: Buffer = .initFixed(&mem);
     _ = try b.alloc(.front, 1, 0); // offset 0..1
     const aligned = try b.alloc(.front, 4, 16);
     try std.testing.expectEqual(@as(usize, 0), @intFromPtr(aligned.ptr) % 16);
@@ -243,7 +243,7 @@ test "alignment pads allocation" {
 
 test "mark and reset" {
     var mem: [32]u8 = undefined;
-    var b = Buffer.initFixed(&mem);
+    var b: Buffer = .initFixed(&mem);
     _ = try b.alloc(.front, 4, 0);
     b.mark(.front);
     _ = try b.alloc(.front, 4, 0);
@@ -257,7 +257,7 @@ test "mark and reset" {
 
 test "clear resets both ends" {
     var mem: [32]u8 = undefined;
-    var b = Buffer.initFixed(&mem);
+    var b: Buffer = .initFixed(&mem);
     _ = try b.alloc(.front, 4, 0);
     _ = try b.alloc(.back, 4, 0);
     b.clear();

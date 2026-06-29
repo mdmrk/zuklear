@@ -49,7 +49,7 @@ pub fn textClamp(font: *const UserFont, text: []const u8, space: f32, sep_list: 
     var sep_g: usize = 0;
     var sep_len: usize = 0;
 
-    var it = unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+    var it: unicode.Utf8Iterator = .{ .bytes = text, .i = 0 };
     while (width < space and len < text.len) {
         const slice = it.nextCodepointSlice() orelse break;
         const rune = unicode.utf8Decode(slice) catch 0xFFFD;
@@ -89,7 +89,7 @@ pub fn textClamp(font: *const UserFont, text: []const u8, space: f32, sep_list: 
 fn mockWidth(_: Handle, _: f32, text: []const u8) f32 {
     return @as(f32, @floatFromInt(unicode.utf8CountCodepoints(text) catch 0)) * 10.0;
 }
-const mock_font = UserFont{ .height = 12, .width = &mockWidth };
+const mock_font: UserFont = .{ .height = 12, .width = &mockWidth };
 
 test "textWidth uses the callback" {
     try std.testing.expectEqual(@as(f32, 50), mock_font.textWidth("hello"));

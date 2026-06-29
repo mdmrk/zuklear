@@ -73,7 +73,7 @@ fn colorPickerBehavior(state: *States, bounds: Rect, matrix: Rect, hue_bar: Rect
 fn drawColorPicker(o: *CommandBuffer, matrix: Rect, hue_bar: Rect, alpha_bar: ?Rect, col: Colorf) !void {
     const white = Color.white;
     const black = Color.black;
-    const black_trans = Color{ .a = 0 };
+    const black_trans: Color = .{ .a = 0 };
     const crosshair: f32 = 7.0;
 
     const h = col.toHsva();
@@ -88,7 +88,7 @@ fn drawColorPicker(o: *CommandBuffer, matrix: Rect, hue_bar: Rect, alpha_bar: ?R
     };
     for (0..6) |i| {
         const fi: f32 = @floatFromInt(i);
-        const seg = Rect.init(hue_bar.x, hue_bar.y + fi * (hue_bar.h / 6.0) + 0.5, hue_bar.w, hue_bar.h / 6.0 + 0.5);
+        const seg: Rect = .init(hue_bar.x, hue_bar.y + fi * (hue_bar.h / 6.0) + 0.5, hue_bar.w, hue_bar.h / 6.0 + 0.5);
         try o.fillRectMultiColor(seg, hue_colors[i], hue_colors[i], hue_colors[i + 1], hue_colors[i + 1]);
     }
     var line_y = @trunc(hue_bar.y + hsva[0] * matrix.h + 0.5);
@@ -102,7 +102,7 @@ fn drawColorPicker(o: *CommandBuffer, matrix: Rect, hue_bar: Rect, alpha_bar: ?R
     }
 
     // SV matrix: white->hue horizontally, transparent->black vertically
-    const temp = Color.fromHsvaF(hsva[0], 1.0, 1.0, 1.0);
+    const temp: Color = .fromHsvaF(hsva[0], 1.0, 1.0, 1.0);
     try o.fillRectMultiColor(matrix, white, temp, temp, white);
     try o.fillRectMultiColor(matrix, black_trans, black_trans, black, black);
 
@@ -125,13 +125,13 @@ pub fn doColorPicker(state: *States, out: *CommandBuffer, col: *Colorf, fmt: Col
     bounds.w -= 2 * padding.x;
     bounds.h -= 2 * padding.y;
 
-    const matrix = Rect{
+    const matrix: Rect = .{
         .x = bounds.x,
         .y = bounds.y,
         .h = bounds.h,
         .w = bounds.w - (3 * padding.x + 2 * bar_w),
     };
-    const hue_bar = Rect{
+    const hue_bar: Rect = .{
         .w = bar_w,
         .y = bounds.y,
         .h = matrix.h,
@@ -152,22 +152,22 @@ pub fn doColorPicker(state: *States, out: *CommandBuffer, col: *Colorf, fmt: Col
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "color picker is stable without input" {
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var state: States = .{};
     var col = Color.rgb(200, 100, 50).toColorf();
     const before = col;
-    const changed = try doColorPicker(&state, &buf, &col, .rgba, Rect.init(0, 0, 200, 150), Vec2.init(0, 0), null, &test_font);
+    const changed = try doColorPicker(&state, &buf, &col, .rgba, .init(0, 0, 200, 150), .init(0, 0), null, &test_font);
     try std.testing.expect(!changed);
     try std.testing.expectEqual(before, col);
 }
 
 test "clicking the SV matrix changes the color" {
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
     var in: Input = .{};
@@ -177,7 +177,7 @@ test "clicking the SV matrix changes the color" {
     var state: States = .{};
     var col = Color.rgb(200, 100, 50).toColorf();
     const before = col;
-    const changed = try doColorPicker(&state, &buf, &col, .rgba, Rect.init(0, 0, 200, 150), Vec2.init(0, 0), &in, &test_font);
+    const changed = try doColorPicker(&state, &buf, &col, .rgba, .init(0, 0, 200, 150), .init(0, 0), &in, &test_font);
     try std.testing.expect(changed);
     try std.testing.expect(col.r != before.r or col.g != before.g or col.b != before.b);
 }

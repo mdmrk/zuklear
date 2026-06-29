@@ -55,13 +55,13 @@ pub fn behavior(state: *States, r: Rect, in: ?*const Input, b: ButtonBehavior) b
 pub fn doButton(state: *States, r: Rect, style: *const StyleButton, in: ?*const Input, b: ButtonBehavior) struct { clicked: bool, content: Rect } {
     const inset = style.padding.x + style.border + style.rounding;
     const inset_y = style.padding.y + style.border + style.rounding;
-    const content = Rect{
+    const content: Rect = .{
         .x = r.x + inset,
         .y = r.y + inset_y,
         .w = r.w - 2 * inset,
         .h = r.h - 2 * inset_y,
     };
-    const touch = Rect{
+    const touch: Rect = .{
         .x = r.x - style.touch_padding.x,
         .y = r.y - style.touch_padding.y,
         .w = r.w + 2 * style.touch_padding.x,
@@ -105,7 +105,7 @@ fn drawButtonText(out: *CommandBuffer, bounds: Rect, content: Rect, state: State
         style.text_normal;
     fg = fg.factor(style.color_factor_text);
 
-    try text_widget.widgetText(out, content, txt, text_alignment, Vec2.init(0, 0), text_bg, fg, font);
+    try text_widget.widgetText(out, content, txt, text_alignment, .init(0, 0), text_bg, fg, font);
 }
 
 /// Draw a text button and report whether it was clicked (`nk_do_button_text`).
@@ -148,11 +148,11 @@ pub fn doButtonSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Sy
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
     return @as(f32, @floatFromInt(t.len)) * 7.0;
 }
-const test_font = UserFont{ .height = 13, .width = &testWidth };
+const test_font: UserFont = .{ .height = 13, .width = &testWidth };
 
 test "button reports click on press inside" {
     var in: Input = .{};
-    const r = Rect.init(0, 0, 100, 30);
+    const r: Rect = .init(0, 0, 100, 30);
     const style = style_mod.Style.default().button;
 
     in.begin();
@@ -160,7 +160,7 @@ test "button reports click on press inside" {
     in.button(.left, 50, 15, true); // press inside
 
     var state: States = .{};
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
@@ -171,14 +171,14 @@ test "button reports click on press inside" {
 
 test "button does not click when not hovered" {
     var in: Input = .{};
-    const r = Rect.init(0, 0, 100, 30);
+    const r: Rect = .init(0, 0, 100, 30);
     const style = style_mod.Style.default().button;
     in.begin();
     in.mouse.pos = .{ .x = 500, .y = 500 }; // far away
     in.button(.left, 500, 500, true);
 
     var state: States = .{};
-    var buf = CommandBuffer.init(std.testing.allocator);
+    var buf: CommandBuffer = .init(std.testing.allocator);
     defer buf.deinit();
     buf.use_clipping = false;
 
