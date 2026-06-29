@@ -7,7 +7,7 @@
 set -e
 cd "$(dirname "$0")"
 ROOT=../..
-NK="$ROOT/../nuklear"
+NK=nuklear
 
 # Nuklear reference dumper. -O0 on purpose: Nuklear's type-punning miscompiles
 # under -O2 here (segfault), unrelated to the comparison.

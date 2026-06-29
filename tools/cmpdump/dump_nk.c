@@ -5,7 +5,7 @@
  * zuklear dumper (dump_zk.zig) reproduces, so the two can be diffed.
  *
  * Build (from this directory):
- *   zig cc -O2 -I../../../nuklear dump_nk.c -lm -o dump_nk
+ *   zig cc -O2 -Inuklear dump_nk.c -lm -o dump_nk
  * Run:
  *   ./dump_nk            # dump frames
  *   ./dump_nk --font     # dump the font width table (metrics check)
@@ -22,7 +22,7 @@
 #define NK_IMPLEMENTATION
 #include "nuklear.h"
 
-#include "../../../nuklear/demo/common/overview.c"
+#include "nuklear/demo/common/overview.c"
 
 #define PIXEL_HEIGHT 13.0f
 #define WIN_W 480
