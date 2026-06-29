@@ -547,6 +547,11 @@ pub const Context = struct {
             if (down and in.hasMouseClickDownInRect(.left, header, true) and !clicked) {
                 win.bounds.x += in.mouse.delta.x;
                 win.bounds.y += in.mouse.delta.y;
+                // Keep the recorded click position under the cursor so the
+                // header rect (which moves with the window) still contains it
+                // on the next frame; otherwise the drag cancels mid-move.
+                in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.x += in.mouse.delta.x;
+                in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.y += in.mouse.delta.y;
             }
         }
 
