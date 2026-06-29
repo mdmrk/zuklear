@@ -1,7 +1,6 @@
-//! Rotary knob widget, ported from `nuklear_knob.c`. Click-drag around the
-//! center, scroll, or arrow keys adjust the value; a cursor line shows the
-//! angle. `zero_direction` chooses where 0 points; `dead_zone_percent` reserves
-//! a gap at the bottom of the sweep.
+//! Rotary knob widget, ported from `nuklear_knob.c`. Click-drag, scroll or
+//! arrow keys adjust the value. `zero_direction` sets where 0 points;
+//! `dead_zone_percent` reserves a gap at the bottom of the sweep.
 
 const std = @import("std");
 const math = @import("math.zig");

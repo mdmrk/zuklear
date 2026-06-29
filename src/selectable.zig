@@ -1,7 +1,6 @@
 //! Selectable widget, ported from `nuklear_selectable.c`. A toggleable labelled
-//! row (used by lists, combos and menus) with separate inactive/active color
-//! sets. The image/symbol-icon variants are deferred; this covers the text
-//! selectable.
+//! row (used by lists, combos and menus) with separate inactive/active colors.
+//! Image-icon variants are deferred; covers text and symbol selectables.
 
 const std = @import("std");
 const math = @import("math.zig");

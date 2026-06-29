@@ -1,7 +1,6 @@
 //! Shared widget primitives, ported from the widget-state helpers in
-//! `nuklear_internal.h` / `nuklear.h`. Kept in their own module so both the
-//! context and the individual widget modules can use them without an import
-//! cycle.
+//! `nuklear_internal.h` / `nuklear.h`. Separate module to avoid an import cycle
+//! between the context and the widget modules.
 
 const std = @import("std");
 

@@ -1,9 +1,8 @@
 //! Mouse and keyboard input state, ported from `nuklear_input.c`.
 //!
-//! In Nuklear the input lives inside `nk_context` and the feed functions take
-//! the context; here `Input` is self-contained with methods. The few
-//! hover-delay helpers that needed `ctx->delta_time_seconds` take an explicit
-//! `delta_time` argument instead.
+//! Nuklear keeps input inside `nk_context`; here `Input` is self-contained with
+//! methods. Hover-delay helpers take an explicit `delta_time` argument in place
+//! of `ctx->delta_time_seconds`.
 
 const std = @import("std");
 const math = @import("math.zig");

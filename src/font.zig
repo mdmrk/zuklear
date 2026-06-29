@@ -1,10 +1,9 @@
 //! The user-font interface and text measurement, ported from the font section
 //! of `nuklear.h` and `nk_text_clamp` (`nuklear_util.c`).
 //!
-//! `UserFont` is the minimal contract the GUI needs from a font: its height
-//! and a width-measuring callback. The optional glyph-query/texture fields used
-//! by the vertex-buffer renderer arrive in the vertex phase. Font *baking* (the
-//! stb-based atlas builder) is a separate later phase.
+//! `UserFont` is the minimal contract the GUI needs from a font: its height and
+//! a width-measuring callback. Glyph quads for rendering come from a separate
+//! text hook; baking lives in the optional `zuklear_font` module (`font/atlas`).
 
 const std = @import("std");
 const unicode = std.unicode;

@@ -1,9 +1,8 @@
 //! Color types and conversions, ported from `nuklear_color.c`.
 //!
-//! Nuklear exposes many `_iv`/`_bv`/`_fv`/`_dv` variants that only differ by
-//! taking a pointer to an array; those are redundant in Zig (callers pass
-//! struct literals or slices), so the port keeps just the meaningful
-//! constructors and conversions, expressed as methods.
+//! Nuklear's `_iv`/`_bv`/`_fv`/`_dv` pointer-to-array variants are dropped as
+//! redundant in Zig; only the meaningful constructors/conversions are kept, as
+//! methods.
 
 const std = @import("std");
 

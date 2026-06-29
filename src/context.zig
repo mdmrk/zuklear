@@ -11,11 +11,6 @@
 //!     map, instead of the intrusive `begin/end/prev/next` list.
 //!   * Each `Window` owns its `CommandBuffer`; the per-window state table is an
 //!     `AutoHashMap` with per-entry `seq` GC.
-//!
-//! First-cut scope: window create/find/GC, panel begin/end (header background +
-//! title; window background; border; clip) and the row-layout engine
-//! (`layoutRow*` + `widget`). Header close/minimize buttons, scrollbars and the
-//! resize scaler are deferred to the widget phase (they need those widgets).
 
 const std = @import("std");
 const math = @import("math.zig");
@@ -518,7 +513,7 @@ pub const Context = struct {
         ctx.panelEnd();
 
         // contextual GC (`nk_panel_end`): drop the open contextual if the count
-        // of contextuals changed between frames, else carry the count forward.
+        // changed between frames, else carry the count forward.
         if (win.popup.active_con != 0 and win.popup.con_old != win.popup.con_count) {
             win.popup.con_count = 0;
             win.popup.con_old = 0;
@@ -656,7 +651,7 @@ pub const Context = struct {
             layout.bounds.h -= layout.footer_height;
         }
 
-        // header (background + title; close/minimize buttons deferred to Phase 4)
+        // header (background + title + close/minimize buttons)
         if (panelHasHeader(win.flags, title)) {
             var header = win.bounds;
             header.h = font.height + 2.0 * s.window.header.padding.y + 2.0 * s.window.header.label_padding.y;
@@ -1478,9 +1473,8 @@ pub const Context = struct {
     /// (`nk_edit_buffer`). Returns the frame's edit events.
     ///
     /// Single-line fields scroll horizontally to keep the cursor visible;
-    /// `EditFlags.multiline` fields wrap on newlines, scroll vertically and
-    /// navigate with up/down. (Multi-line selection isn't highlighted and long
-    /// lines are clipped rather than horizontally scrolled.)
+    /// `EditFlags.multiline` fields wrap on newlines and scroll vertically.
+    /// (Multi-line selection isn't highlighted; long lines are clipped.)
     pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
@@ -1746,10 +1740,9 @@ pub const Context = struct {
         return (rune >= '0' and rune <= '9') or rune == '.' or rune == '-' or rune == '+' or rune == 'e' or rune == 'E';
     }
 
-    /// Format a property value the way Nuklear does (`nk_dtoa` +
-    /// `nk_string_float_limit` to `NK_MAX_FLOAT_PRECISION`=2): shortest decimal,
-    /// at most two fractional digits, no trailing zeros. Integral values render
-    /// without a decimal point, so `nk_property_int` shows "10" (not "10.00").
+    /// Format a property value like Nuklear (`nk_dtoa` + `nk_string_float_limit`
+    /// to `NK_MAX_FLOAT_PRECISION`=2): at most two fractional digits, no trailing
+    /// zeros, no decimal point for integral values (so `nk_property_int` → "10").
     fn formatProperty(buf: []u8, value: f32) []const u8 {
         var str: []const u8 = std.fmt.bufPrint(buf, "{d:.2}", .{value}) catch return "?";
         if (std.mem.indexOfScalar(u8, str, '.') != null) {

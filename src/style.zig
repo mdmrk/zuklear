@@ -1,11 +1,10 @@
 //! Widget styling and the default dark theme, ported from `nuklear_style.c`.
 //!
-//! This is the largest data structure in Nuklear. Fields that are constant
-//! across every instance in the upstream `nk_style_from_table` (all the
-//! `color_factor*` = 1.0, `disabled_factor` = 0.5, null draw callbacks, zero
-//! touch padding, centered button text) are expressed as Zig struct defaults,
-//! so `fromTable` only sets what actually varies. `nk_style_item` becomes a
-//! tagged union, and the bitflag text alignment becomes a packed struct.
+//! Nuklear's largest data structure. Fields constant across every instance in
+//! `nk_style_from_table` (`color_factor*` = 1.0, `disabled_factor` = 0.5, null
+//! draw callbacks, zero touch padding, centered button text) become Zig struct
+//! defaults, so `fromTable` only sets what varies. `nk_style_item` becomes a
+//! tagged union; the bitflag text alignment becomes a packed struct.
 
 const std = @import("std");
 const math = @import("math.zig");

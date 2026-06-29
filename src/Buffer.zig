@@ -1,10 +1,9 @@
 //! A double-ended linear buffer, ported from `nuklear_buffer.c`.
 //!
-//! Memory is allocated from a single block at both ends: the *front* grows
-//! upward from offset 0, the *back* grows downward from the top. The only
-//! freeing policy is reset/clear. A `fixed` buffer wraps caller-provided
-//! memory and never grows; a `dynamic` buffer owns an allocator and grows by
-//! `grow_factor` when full.
+//! One block allocated from both ends: the *front* grows up from offset 0, the
+//! *back* grows down from the top. Only reset/clear frees. A `fixed` buffer
+//! wraps caller memory and never grows; a `dynamic` buffer owns an allocator and
+//! grows by `grow_factor` when full.
 //!
 //! Nuklear's `nk_allocator` callback pair is replaced by `std.mem.Allocator`.
 

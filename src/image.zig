@@ -1,7 +1,6 @@
 //! Image and nine-slice types, ported from the BASIC section of `nuklear.h`.
-//! (The `nuklear_image.c` constructors/sub-image helpers land in the widget
-//! phase; this module currently provides the types and basic constructors the
-//! draw layer needs.)
+//! Provides the types and basic constructors the draw layer needs; the
+//! `nuklear_image.c` sub-image helpers land in the widget phase.
 
 const std = @import("std");
 const Handle = @import("handle.zig").Handle;

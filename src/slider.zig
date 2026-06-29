@@ -1,8 +1,7 @@
 //! Slider widget, ported from `nuklear_slider.c`.
 //!
-//! The optional inc/dec buttons (`style.show_buttons`, off by default) are
-//! deferred until the symbol-button widget exists; the core drag/value logic is
-//! complete.
+//! Optional inc/dec buttons (`style.show_buttons`, off by default) are deferred;
+//! the core drag/value logic is complete.
 
 const std = @import("std");
 const math = @import("math.zig");

@@ -1,8 +1,7 @@
 //! Text/label rendering, ported from `nk_widget_text` (`nuklear_text.c`).
 //!
-//! `widgetText` aligns a string within a bounding box (horizontally and
-//! vertically per `Align`) and emits a draw-text command. The `Context`-level
-//! `label`/`text` helpers that allocate a layout slot and call this live in
+//! `widgetText` aligns a string within a box (per `Align`) and emits a
+//! draw-text command. The `Context`-level `label`/`text` helpers live in
 //! `context.zig`.
 
 const std = @import("std");

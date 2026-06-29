@@ -1,11 +1,9 @@
 //! TTF font baking — the optional `zuklear_font` module.
 //!
-//! This is the one place zuklear uses C: it bakes a TrueType font into an alpha
-//! atlas using the vendored `stb_truetype` + `stb_rect_pack` (both compiled as
-//! C, per the project's font decision). The result is a coverage bitmap plus
-//! per-glyph metrics and a `zuklear.UserFont` whose width callback uses the
-//! baked advances. Renderers (software alpha-blit, or a GL texture) consume the
-//! bitmap + `quad()` UVs.
+//! The one place zuklear uses C: bakes a TrueType font into an alpha atlas via
+//! the vendored `stb_truetype` + `stb_rect_pack`. Produces a coverage bitmap,
+//! per-glyph metrics and a `zuklear.UserFont`; renderers consume the bitmap +
+//! `quad()` UVs.
 //!
 //! The core `zuklear` module stays pure Zig and dependency-free; only consumers
 //! that import `zuklear_font` pull in libc + stb.

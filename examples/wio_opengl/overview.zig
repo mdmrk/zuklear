@@ -1,10 +1,8 @@
 //! A faithful port of Nuklear's canonical `demo/common/overview.c` to zuklear.
 //!
 //! Persistent demo state (Nuklear's `static` locals) lives in `State`, created
-//! once by the caller and threaded through. Sections that need not-yet-ported
-//! subsystems (menubar, contextual, blocking popup, tooltips, style stack,
-//! tree-element, edit filters, spacing) are marked `TODO` and will land as those
-//! land.
+//! once by the caller and threaded through. Sections needing not-yet-ported
+//! subsystems are marked `TODO` inline.
 
 const std = @import("std");
 const zk = @import("zuklear");

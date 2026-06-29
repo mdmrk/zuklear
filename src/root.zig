@@ -1,10 +1,10 @@
 //! zuklear — an idiomatic Zig port of the Nuklear immediate-mode GUI library.
 //!
-//! The public entry point: every module is re-exported here so consumers reach
-//! the whole API through `@import("zuklear")`. The usual flow is to drive a
-//! `Context` (windows, layout, widgets) and feed the resulting per-window
-//! `CommandBuffer`s to a renderer — `render.vertex` produces a draw list for
-//! OpenGL/Vulkan. The separate `zuklear_font` package bakes TrueType fonts.
+//! Public entry point: every module is re-exported so consumers reach the whole
+//! API through `@import("zuklear")`. The usual flow drives a `Context` (windows,
+//! layout, widgets) and feeds the per-window `CommandBuffer`s to a renderer;
+//! `render.vertex` produces an OpenGL/Vulkan draw list. The separate
+//! `zuklear_font` package bakes TrueType fonts.
 //!
 //! The core library is pure Zig with no dependencies. See `PLAN.md` for the map
 //! of which Nuklear modules each file ports.

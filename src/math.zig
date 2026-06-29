@@ -1,7 +1,6 @@
-//! Geometry primitives and a few numeric helpers, ported from
-//! `nuklear_math.c`. Nuklear shipped its own sqrt/sin/cos approximations to
-//! avoid depending on libm; the Zig port uses `std.math`, which is both
-//! freestanding-friendly and more accurate.
+//! Geometry primitives and a few numeric helpers, ported from `nuklear_math.c`.
+//! Nuklear's own libm-free sqrt/sin/cos approximations are replaced with
+//! `std.math` (freestanding-friendly and more accurate).
 
 const std = @import("std");
 

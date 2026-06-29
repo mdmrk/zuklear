@@ -1,15 +1,11 @@
 //! The draw command buffer, ported from `nuklear_draw.c`.
 //!
-//! Nuklear records draw commands as variable-length packed structs inside a
-//! single byte `Buffer`, linked by `next` offsets and iterated with manual
-//! pointer casts. The idiomatic port represents each command as a value in a
-//! `Command` `union(enum)` and stores them in an `ArrayList`. Variable-length
-//! payloads (polygon points) are owned slices freed on `reset`.
+//! Nuklear packs variable-length draw commands into a byte `Buffer`; the port
+//! represents each as a `Command` `union(enum)` value in an `ArrayList`, with
+//! variable-length payloads (polygon points) as owned slices freed on `reset`.
 //!
 //! Coordinates are quantized to `i16`/`u16` exactly as Nuklear does, so a
-//! renderer consuming the commands sees identical pixel geometry. Geometric
-//! primitives live here; text/image/custom commands arrive with the font
-//! interface.
+//! renderer sees identical pixel geometry.
 
 const std = @import("std");
 const math = @import("math.zig");

@@ -2,10 +2,10 @@
 //! `Command` list into interleaved vertices, indices and draw batches for a
 //! hardware renderer (OpenGL/Vulkan/...).
 //!
-//! Solid geometry samples a white texel (`white_uv`) so a single textured
-//! shader handles both shapes and text; batches split only when the scissor
-//! clip changes. Text geometry is emitted by an optional hook (the
-//! `zuklear_font` atlas provides one) so this module stays pure Zig.
+//! Solid geometry samples a white texel (`white_uv`) so one textured shader
+//! handles both shapes and text; batches split only on scissor-clip changes.
+//! Text geometry comes from an optional hook (provided by `zuklear_font`), so
+//! this module stays pure Zig.
 
 const std = @import("std");
 const math = @import("../math.zig");

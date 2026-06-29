@@ -2,10 +2,9 @@
 //! `Buffer` (front region) and tracks the glyph count alongside the byte
 //! length. Used by the text editor and edit widget.
 //!
-//! Nuklear exposes many near-duplicate entry points (`_char`/`_utf8`/`_runes`
-//! and `str_`/`text_` pairs). Since Zig works with byte slices directly, the
-//! port keeps a focused set: byte-slice and rune operations, with byte- and
-//! rune-indexed insertion/deletion.
+//! Nuklear's many near-duplicate entry points (`_char`/`_utf8`/`_runes`,
+//! `str_`/`text_`) collapse to a focused set here: byte-slice and rune
+//! operations with byte- and rune-indexed insertion/deletion.
 
 const std = @import("std");
 const unicode = std.unicode;

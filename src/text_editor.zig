@@ -1,11 +1,9 @@
 //! Text editor state, ported from `nuklear_text_editor.c` (itself derived from
-//! stb_textedit). This is a functional editor covering insertion, deletion,
-//! cursor movement, selection, word motion and clipboard cut/copy/paste.
+//! stb_textedit). Covers insertion, deletion, cursor/word/line motion,
+//! selection, clipboard cut/copy/paste and a full undo/redo history.
 //!
-//! Supports insertion, deletion, cursor/word/line motion, selection, clipboard
-//! and a full undo/redo history. Pixel layout (drawing, click-to-position,
-//! scrolling) lives in the edit widget (`Context.editBuffer`), which has the
-//! font.
+//! Pixel layout (drawing, click-to-position, scrolling) lives in the edit widget
+//! (`Context.editBuffer`), which has the font.
 
 const std = @import("std");
 const unicode = std.unicode;

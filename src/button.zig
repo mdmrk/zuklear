@@ -1,8 +1,7 @@
 //! Button widget, ported from `nuklear_button.c`.
 //!
-//! These are the low-level, pure routines (no `Context`): behavior detection,
-//! background drawing and the text-button composition. `Context.buttonLabel`
-//! and friends wrap them after allocating a layout slot.
+//! Low-level pure routines (no `Context`); `Context.buttonLabel` and friends
+//! wrap them after allocating a layout slot.
 
 const std = @import("std");
 const math = @import("math.zig");
@@ -108,7 +107,7 @@ fn drawButtonText(out: *CommandBuffer, bounds: Rect, content: Rect, state: State
     try text_widget.widgetText(out, content, txt, text_alignment, .init(0, 0), text_bg, fg, font);
 }
 
-/// Draw a text button and report whether it was clicked (`nk_do_button_text`).
+/// Draw a text button; returns whether it was clicked (`nk_do_button_text`).
 pub fn doButtonText(state: *States, out: *CommandBuffer, bounds: Rect, string: []const u8, text_alignment: Align, b: ButtonBehavior, style: *const StyleButton, in: ?*const Input, font: *const UserFont) !bool {
     const r = doButton(state, bounds, style, in, b);
     if (style.draw_begin) |cb| cb(out, style.userdata);
@@ -133,7 +132,7 @@ fn drawButtonSymbol(out: *CommandBuffer, bounds: Rect, content: Rect, state: Sta
     try symbol_mod.drawSymbol(out, sym, content, sym_bg, fg, style.border, font);
 }
 
-/// Draw a symbol button and report whether it was clicked
+/// Draw a symbol button; returns whether it was clicked
 /// (`nk_do_button_symbol`).
 pub fn doButtonSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Symbol, b: ButtonBehavior, style: *const StyleButton, in: ?*const Input, font: *const UserFont) !bool {
     const r = doButton(state, bounds, style, in, b);
@@ -160,8 +159,8 @@ fn drawButtonTextSymbol(out: *CommandBuffer, bounds: Rect, label: Rect, sym_rect
     try text_widget.widgetText(out, label, str, .{ .middle = true, .centered = true }, .init(0, 0), text_bg, fg, font);
 }
 
-/// Draw a button with both a symbol and a centered label, reporting whether it
-/// was clicked (`nk_do_button_text_symbol`).
+/// Draw a button with a symbol and centered label; returns whether it was
+/// clicked (`nk_do_button_text_symbol`).
 pub fn doButtonTextSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Symbol, str: []const u8, text_alignment: Align, b: ButtonBehavior, style: *const StyleButton, font: *const UserFont, in: ?*const Input) !bool {
     const r = doButton(state, bounds, style, in, b);
     const content = r.content;
@@ -193,7 +192,7 @@ test "button reports click on press inside" {
     const style = style_mod.Style.default().button;
 
     in.begin();
-    in.mouse.pos = .{ .x = 50, .y = 15 }; // hover inside
+    in.mouse.pos = .{ .x = 50, .y = 15 };
     in.button(.left, 50, 15, true); // press inside
 
     var state: States = .{};
