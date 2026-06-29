@@ -70,6 +70,16 @@ pub const State = struct {
     cmb_chart_sel: f32 = 8.0,
     cmb_position: [3]f32 = .{ 0, 0, 0 },
 
+    // Widgets > Input (edit)
+    in_text: [9][64]u8 = [_][64]u8{[_]u8{0} ** 64} ** 9,
+    in_text_len: [9]usize = [_]usize{0} ** 9,
+    in_field: [64]u8 = [_]u8{0} ** 64,
+    in_field_len: usize = 0,
+    in_field2: [64]u8 = [_]u8{0} ** 64,
+    in_field2_len: usize = 0,
+    in_box: [512]u8 = [_]u8{0} ** 512,
+    in_box_len: usize = 0,
+
     // Widgets > Inactive
     inactive: bool = true,
 
@@ -100,6 +110,11 @@ pub const State = struct {
     complex_rt: [4]bool = [_]bool{false} ** 4,
     complex_rc: [4]bool = [_]bool{false} ** 4,
     complex_rb: [4]bool = [_]bool{false} ** 4,
+
+    // Layout > Tree
+    tree_root_selected: bool = false,
+    tree_selected: [8]bool = [_]bool{false} ** 8,
+    tree_sel_nodes: [4]bool = [_]bool{false} ** 4,
 
     // Layout > Notebook / Splitter
     nb_current_tab: i32 = 0,
@@ -158,8 +173,8 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
             try widgetsInactive(ctx, st);
             try widgetsSelectable(ctx, st);
             try widgetsCombo(ctx, st);
+            try widgetsInput(ctx, st);
             try widgetsHorizontalRule(ctx);
-            // TODO: Input (edit) — needs editString + filters
             ctx.treePop();
         }
 
@@ -176,8 +191,8 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
             try layoutNotebook(ctx, st);
             try layoutSimple(ctx, st);
             try layoutComplex(ctx, st);
+            try layoutTree(ctx, st);
             try layoutSplitter(ctx, st);
-            // TODO: Tree (needs treeElementPush + selectableSymbolLabel)
             ctx.treePop();
         }
 
@@ -479,6 +494,36 @@ fn widgetsCombo(ctx: *zk.Context, st: *State) !void {
             ctx.comboEnd();
         }
         // TODO: time/date pickers (need date math + spacing grid)
+        ctx.treePop();
+    }
+}
+
+fn widgetsInput(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.node, "Input", .minimized, 19)) {
+        const ratio = [_]f32{ 120, 150 };
+        ctx.layoutRow(.static, 25, &ratio);
+        try ctx.label("Default:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[0], &st.in_text_len[0], &zk.filters.default);
+        try ctx.label("Int:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[1], &st.in_text_len[1], &zk.filters.decimal);
+        try ctx.label("Float:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[2], &st.in_text_len[2], &zk.filters.float);
+        try ctx.label("Hex:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[4], &st.in_text_len[4], &zk.filters.hex);
+        try ctx.label("Octal:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[5], &st.in_text_len[5], &zk.filters.oct);
+        try ctx.label("Binary:", .text_left);
+        _ = try ctx.editString(.simple, &st.in_text[6], &st.in_text_len[6], &zk.filters.binary);
+
+        try ctx.label("Field:", .text_left);
+        _ = try ctx.editString(.field, &st.in_field, &st.in_field_len, &zk.filters.default);
+        try ctx.label("Field 2:", .text_left);
+        _ = try ctx.editString(.{ .selectable = true, .clipboard = true, .always_insert_mode = true }, &st.in_field2, &st.in_field2_len, &zk.filters.default);
+
+        try ctx.label("Box:", .text_left);
+        ctx.layoutRowStatic(180, 278, 1);
+        _ = try ctx.editString(.box, &st.in_box, &st.in_box_len, &zk.filters.default);
+        // TODO: password (masked) + sig_enter submit
         ctx.treePop();
     }
 }
@@ -792,6 +837,34 @@ fn layoutComplex(ctx: *zk.Context, st: *State) !void {
         }
 
         ctx.layoutSpaceEnd();
+        ctx.treePop();
+    }
+}
+
+fn layoutTree(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.node, "Tree", .minimized, 48)) {
+        var sel = st.tree_root_selected;
+        if (try ctx.treeElementPush(.node, "Root", .minimized, &sel, 480)) {
+            var node_select = st.tree_selected[0];
+            if (sel != st.tree_root_selected) {
+                st.tree_root_selected = sel;
+                for (&st.tree_selected) |*x| x.* = sel;
+            }
+            if (try ctx.treeElementPush(.node, "Node", .minimized, &node_select, 481)) {
+                if (node_select != st.tree_selected[0]) {
+                    st.tree_selected[0] = node_select;
+                    for (&st.tree_sel_nodes) |*x| x.* = node_select;
+                }
+                ctx.layoutRowStatic(18, 100, 1);
+                for (&st.tree_sel_nodes) |*x|
+                    _ = try ctx.selectableSymbolLabel(.circle_solid, if (x.*) "Selected" else "Unselected", .text_right, x);
+                ctx.treeElementPop();
+            }
+            ctx.layoutRowStatic(18, 100, 1);
+            for (st.tree_selected[1..]) |*x|
+                _ = try ctx.selectableSymbolLabel(.circle_solid, if (x.*) "Selected" else "Unselected", .text_right, x);
+            ctx.treeElementPop();
+        }
         ctx.treePop();
     }
 }
