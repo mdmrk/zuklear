@@ -158,6 +158,10 @@ pub fn main(init: std.process.Init) !void {
         const cfg: zk.render.vertex.ConvertConfig = .{
             .white_uv = atlas.whiteUv(),
             .text_hook = &zkfont.drawListText,
+            // Match Nuklear's reference backends: both AA flags on
+            // (config.shape_AA = config.line_AA = NK_ANTI_ALIASING_ON).
+            .shape_aa = true,
+            .line_aa = true,
         };
         for (ctx.windows.items) |w| try draw_list.convert(w.buffer.items(), cfg);
 

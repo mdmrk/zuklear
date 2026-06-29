@@ -139,10 +139,12 @@ pub const DrawList = struct {
         const y: f32 = @floatFromInt(c.y);
         const w: f32 = @floatFromInt(c.w);
         const h: f32 = @floatFromInt(c.h);
-        const ia = try dl.vertex(x, y, u, v, rgba(c.top));
-        const ib = try dl.vertex(x + w, y, u, v, rgba(c.right));
-        const ic = try dl.vertex(x + w, y + h, u, v, rgba(c.bottom));
-        const id = try dl.vertex(x, y + h, u, v, rgba(c.left));
+        // Corner→color mapping matches Nuklear's `fill_rect_multi_color`:
+        // top-left=left, top-right=top, bottom-right=right, bottom-left=bottom.
+        const ia = try dl.vertex(x, y, u, v, rgba(c.left));
+        const ib = try dl.vertex(x + w, y, u, v, rgba(c.top));
+        const ic = try dl.vertex(x + w, y + h, u, v, rgba(c.right));
+        const id = try dl.vertex(x, y + h, u, v, rgba(c.bottom));
         try dl.tri(ia, ib, ic);
         try dl.tri(ia, ic, id);
     }
@@ -195,12 +197,23 @@ pub const DrawList = struct {
             try dl.pathTo(.{ x + w, y + h });
             try dl.pathTo(.{ x, y + h });
         } else {
-            const half_pi = std.math.pi * 0.5;
-            // corners: top-left, top-right, bottom-right, bottom-left
-            try dl.pathArc(x + r, y + r, r, std.math.pi, std.math.pi + half_pi, 5);
-            try dl.pathArc(x + w - r, y + r, r, std.math.pi + half_pi, std.math.tau, 5);
-            try dl.pathArc(x + w - r, y + h - r, r, 0, half_pi, 5);
-            try dl.pathArc(x + r, y + h - r, r, half_pi, std.math.pi, 5);
+            // Rounded corners via Nuklear's `path_arc_to_fast` (a 12-segment
+            // unit circle sampled at fixed steps): top-left 6..9, top-right
+            // 9..12, bottom-right 0..3, bottom-left 3..6.
+            try dl.pathArcFast(x + r, y + r, r, 6, 9);
+            try dl.pathArcFast(x + w - r, y + r, r, 9, 12);
+            try dl.pathArcFast(x + w - r, y + h - r, r, 0, 3);
+            try dl.pathArcFast(x + r, y + h - r, r, 3, 6);
+        }
+    }
+
+    /// Append points along a circle using Nuklear's 12-step fast table
+    /// (`nk_draw_list_path_arc_to_fast`): integer steps `a_min..=a_max`.
+    fn pathArcFast(dl: *DrawList, cx: f32, cy: f32, r: f32, a_min: u32, a_max: u32) !void {
+        var a = a_min;
+        while (a <= a_max) : (a += 1) {
+            const ang = (@as(f32, @floatFromInt(a)) / 12.0) * std.math.tau;
+            try dl.pathTo(.{ cx + @cos(ang) * r, cy + @sin(ang) * r });
         }
     }
 
@@ -477,17 +490,23 @@ pub const DrawList = struct {
                     clip = .initI(s.x, s.y, s.w, s.h);
                 },
                 .rect_filled => |c| {
-                    try dl.pathRect(@floatFromInt(c.x), @floatFromInt(c.y), @floatFromInt(c.w), @floatFromInt(c.h), @floatFromInt(c.rounding));
+                    // Without AA, Nuklear nudges the top-left corner by -0.5 so
+                    // edges land on pixel centers (`nk_draw_list_fill_rect`).
+                    const o: f32 = if (cfg.line_aa) 0 else 0.5;
+                    try dl.pathRect(@as(f32, @floatFromInt(c.x)) - o, @as(f32, @floatFromInt(c.y)) - o, @as(f32, @floatFromInt(c.w)) + o, @as(f32, @floatFromInt(c.h)) + o, @floatFromInt(c.rounding));
                     try dl.pathFill(c.color);
                 },
                 .rect => |c| {
-                    try dl.pathRect(@floatFromInt(c.x), @floatFromInt(c.y), @floatFromInt(c.w), @floatFromInt(c.h), @floatFromInt(c.rounding));
+                    const o: f32 = if (cfg.line_aa) 0 else 0.5;
+                    try dl.pathRect(@as(f32, @floatFromInt(c.x)) - o, @as(f32, @floatFromInt(c.y)) - o, @as(f32, @floatFromInt(c.w)) + o, @as(f32, @floatFromInt(c.h)) + o, @floatFromInt(c.rounding));
                     try dl.pathStroke(c.color, true, @floatFromInt(c.line_thickness));
                 },
                 .rect_multi_color => |c| try dl.rectMultiColor(c),
                 .line => |c| {
-                    try dl.pathTo(.{ @floatFromInt(c.begin.x), @floatFromInt(c.begin.y) });
-                    try dl.pathTo(.{ @floatFromInt(c.end.x), @floatFromInt(c.end.y) });
+                    // Same pixel-center nudge for non-AA lines (`nk_stroke_line`).
+                    const o: f32 = if (cfg.line_aa) 0 else 0.5;
+                    try dl.pathTo(.{ @as(f32, @floatFromInt(c.begin.x)) - o, @as(f32, @floatFromInt(c.begin.y)) - o });
+                    try dl.pathTo(.{ @as(f32, @floatFromInt(c.end.x)) - o, @as(f32, @floatFromInt(c.end.y)) - o });
                     try dl.pathStroke(c.color, false, @floatFromInt(c.line_thickness));
                 },
                 .circle_filled => |c| {
@@ -562,6 +581,36 @@ pub const DrawList = struct {
 };
 
 // --- tests ---------------------------------------------------------------
+
+test "rect_multi_color corners match Nuklear (TL=left,TR=top,BR=right,BL=bottom)" {
+    var dl: DrawList = .init(std.testing.allocator);
+    defer dl.deinit();
+    const left: Color = .rgb(10, 0, 0);
+    const top: Color = .rgb(0, 20, 0);
+    const right: Color = .rgb(0, 0, 30);
+    const bottom: Color = .rgb(40, 40, 40);
+    var cmds = [_]Command{
+        .{ .rect_multi_color = .{ .x = 0, .y = 0, .w = 10, .h = 10, .left = left, .top = top, .right = right, .bottom = bottom } },
+    };
+    try dl.convert(&cmds, .{});
+    // vertices are emitted TL, TR, BR, BL
+    try std.testing.expectEqual(DrawList.rgba(left), dl.vertices.items[0].col);
+    try std.testing.expectEqual(DrawList.rgba(top), dl.vertices.items[1].col);
+    try std.testing.expectEqual(DrawList.rgba(right), dl.vertices.items[2].col);
+    try std.testing.expectEqual(DrawList.rgba(bottom), dl.vertices.items[3].col);
+}
+
+test "non-AA border is fully opaque (no see-through fringe)" {
+    var dl: DrawList = .init(std.testing.allocator);
+    defer dl.deinit();
+    var cmds = [_]Command{
+        .{ .rect = .{ .rounding = 0, .line_thickness = 1, .x = 4, .y = 4, .w = 24, .h = 10, .color = .rgb(65, 65, 65) } },
+    };
+    try dl.convert(&cmds, .{ .line_aa = false });
+    // every emitted vertex must be opaque — a transparent one would let the
+    // background bleed through the border.
+    for (dl.vertices.items) |v| try std.testing.expectEqual(@as(u8, 255), v.col[3]);
+}
 
 test "convert emits a quad per filled rect (no AA)" {
     var dl: DrawList = .init(std.testing.allocator);
