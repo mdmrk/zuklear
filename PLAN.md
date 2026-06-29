@@ -4,6 +4,25 @@ An **idiomatic** Zig 0.16.0 port of [Nuklear](https://github.com/Immediate-Mode-
 v4.13.3 (single-header immediate-mode GUI in C89). Not a `@cImport` wrapper — the
 public API is redesigned to feel native to Zig.
 
+## Fidelity
+
+This is a **faithful, idiomatic 1:1 port** of Nuklear: every widget, the layout
+engine, panel/window handling and the draw path reproduce upstream behavior
+pixel- and interaction-for-interaction. The translation is idiomatic (methods,
+error unions, tagged unions, flag structs, `std.mem.Allocator`, `std` math)
+rather than a literal transliteration, but the observable behavior matches the C
+reference. Intentional deviations are local and documented (e.g. `std.math` for
+sin/cos/sqrt instead of Nuklear's approximations; an allocator-backed memory
+model instead of the `nk_pool`/`nk_page_element` machinery; per-window command
+buffers instead of one shared byte buffer).
+
+A line-by-line audit against `../src/*.c` confirmed parity across the
+foundations, every `do*`/`draw*` widget routine, the row-layout engine,
+`nk_widget`, panel begin/end, the non-blocking popup core and the vertex
+draw-list (`nk_convert`). The few behavioral divergences found were fixed:
+`NK_WINDOW_SCROLL_AUTO_HIDE`, the `NK_WINDOW_DYNAMIC` panel-end fill, and
+`nk_property_*` number formatting.
+
 ## Source of truth
 
 Port from the **modular** sources in `../src/*.c` and `../src/nuklear.h` (the public
@@ -150,13 +169,11 @@ backend would reuse `render/vertex.zig` unchanged. Both renderers now handle
 arcs, curves and images; only the renderer-defined `custom` callback is left for
 the app to dispatch.
 
-**Phase 7 — wio renderer** ✅ done (software path)
-`render/software.zig` rasterizes the `Command` list to an RGB pixel surface
-(scissor, rects, lines, triangles, circles, gradients, polygons, text, alpha
-blend). `font/builtin.zig` provides an 8x8 bitmap `UserFont` so text renders
-without baking. `examples/wio_software/main.zig` is the working demo: wio window +
-input + framebuffer driving a full UI (`zig build example` / `run-example`).
-Curves/arcs/images in the rasterizer and a GL backend are TODO.
+**Phase 7 — wio renderer** ✅ done, then **removed**
+A software rasterizer (`render/software.zig`) plus an 8x8 bitmap `UserFont`
+(`font/builtin.zig`) and a framebuffer demo once existed. They were **deleted**:
+the OpenGL path (`render/vertex` + `examples/wio_opengl`) is the single supported
+backend. `zig build example` / `run-example` now build/run the OpenGL demo.
 
 **Phase 5 — Font baking** ✅ done (stb as C)
 Both `stb_rect_pack.h` and `stb_truetype.h` are vendored and compiled as C
@@ -172,6 +189,11 @@ headers are used as C.)
 
 ## Commit policy
 
-Conventional Commits, committed inside the `zuklear/` git repo. Author = repo
-owner; **never** authored by Claude, no AI co-author trailer. One commit per
-coherent unit (a module + its tests).
+- **Format: [Conventional Commits](https://www.conventionalcommits.org/).**
+  `type(scope): summary` — e.g. `feat(widget): add knob`, `fix(panel): honor
+  SCROLL_AUTO_HIDE`, `refactor`, `docs`, `test`, `chore`.
+- **Author: the repo owner only.** Every commit is authored by the repo owner.
+  **Never** authored or co-authored by Claude/AI — do **not** add a
+  `Co-Authored-By` trailer or any "Generated with" line.
+- Commit inside the `zuklear/` git repo, one commit per coherent unit (a module
+  + its tests, or one self-contained change).
