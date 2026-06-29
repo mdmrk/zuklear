@@ -139,8 +139,7 @@ pub const DrawList = struct {
         const y: f32 = @floatFromInt(c.y);
         const w: f32 = @floatFromInt(c.w);
         const h: f32 = @floatFromInt(c.h);
-        // Corner→color mapping matches Nuklear's `fill_rect_multi_color`:
-        // top-left=left, top-right=top, bottom-right=right, bottom-left=bottom.
+        // corners TL=left, TR=top, BR=right, BL=bottom (`fill_rect_multi_color`)
         const ia = try dl.vertex(x, y, u, v, rgba(c.left));
         const ib = try dl.vertex(x + w, y, u, v, rgba(c.top));
         const ic = try dl.vertex(x + w, y + h, u, v, rgba(c.right));
@@ -197,9 +196,7 @@ pub const DrawList = struct {
             try dl.pathTo(.{ x + w, y + h });
             try dl.pathTo(.{ x, y + h });
         } else {
-            // Rounded corners via Nuklear's `path_arc_to_fast` (a 12-segment
-            // unit circle sampled at fixed steps): top-left 6..9, top-right
-            // 9..12, bottom-right 0..3, bottom-left 3..6.
+            // rounded corners, mirroring Nuklear's `path_rect_to`
             try dl.pathArcFast(x + r, y + r, r, 6, 9);
             try dl.pathArcFast(x + w - r, y + r, r, 9, 12);
             try dl.pathArcFast(x + w - r, y + h - r, r, 0, 3);
@@ -207,8 +204,7 @@ pub const DrawList = struct {
         }
     }
 
-    /// Append points along a circle using Nuklear's 12-step fast table
-    /// (`nk_draw_list_path_arc_to_fast`): integer steps `a_min..=a_max`.
+    /// Nuklear's `path_arc_to_fast`: a 12-step circle sampled at `a_min..=a_max`.
     fn pathArcFast(dl: *DrawList, cx: f32, cy: f32, r: f32, a_min: u32, a_max: u32) !void {
         var a = a_min;
         while (a <= a_max) : (a += 1) {
@@ -490,8 +486,7 @@ pub const DrawList = struct {
                     clip = .initI(s.x, s.y, s.w, s.h);
                 },
                 .rect_filled => |c| {
-                    // Without AA, Nuklear nudges the top-left corner by -0.5 so
-                    // edges land on pixel centers (`nk_draw_list_fill_rect`).
+                    // non-AA nudges the top-left -0.5 onto pixel centers (`nk_fill_rect`)
                     const o: f32 = if (cfg.line_aa) 0 else 0.5;
                     try dl.pathRect(@as(f32, @floatFromInt(c.x)) - o, @as(f32, @floatFromInt(c.y)) - o, @as(f32, @floatFromInt(c.w)) + o, @as(f32, @floatFromInt(c.h)) + o, @floatFromInt(c.rounding));
                     try dl.pathFill(c.color);
@@ -503,8 +498,7 @@ pub const DrawList = struct {
                 },
                 .rect_multi_color => |c| try dl.rectMultiColor(c),
                 .line => |c| {
-                    // Same pixel-center nudge for non-AA lines (`nk_stroke_line`).
-                    const o: f32 = if (cfg.line_aa) 0 else 0.5;
+                    const o: f32 = if (cfg.line_aa) 0 else 0.5; // see rect_filled
                     try dl.pathTo(.{ @as(f32, @floatFromInt(c.begin.x)) - o, @as(f32, @floatFromInt(c.begin.y)) - o });
                     try dl.pathTo(.{ @as(f32, @floatFromInt(c.end.x)) - o, @as(f32, @floatFromInt(c.end.y)) - o });
                     try dl.pathStroke(c.color, false, @floatFromInt(c.line_thickness));
