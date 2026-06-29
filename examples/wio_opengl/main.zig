@@ -57,7 +57,8 @@ pub fn main(init: std.process.Init) !void {
 
     var renderer: glr.Renderer = .init(&wio.glGetProcAddress);
 
-    var atlas = try zkfont.bake(gpa, @import("assets").ttf, 18, 512, 512);
+    // Nuklear's default font (ProggyClean), so the demo matches upstream.
+    var atlas = try zkfont.bakeDefault(gpa, 13);
     defer atlas.deinit();
     try renderer.uploadFont(gpa, &atlas);
     const font = atlas.userFont();

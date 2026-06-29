@@ -176,12 +176,20 @@ pub fn bake(allocator: std.mem.Allocator, ttf: []const u8, pixel_height: f32, wi
     return atlas;
 }
 
+/// Nuklear's default font (ProggyClean), embedded so callers get the same font
+/// as upstream without supplying their own TTF (cf. `nk_font_atlas_add_default`).
+pub const default_ttf = @embedFile("ProggyClean.ttf");
+
+/// Bake the default ProggyClean font at `pixel_height` into a 512x512 atlas.
+/// At 13px it matches Nuklear's default font metrics (fixed 7px advance).
+pub fn bakeDefault(allocator: std.mem.Allocator, pixel_height: f32) !Atlas {
+    return bake(allocator, default_ttf, pixel_height, 512, 512);
+}
+
 // --- tests ---------------------------------------------------------------
 
-const proggy = @embedFile("ProggyClean.ttf");
-
 test "bakes a TTF into a non-empty atlas with sane metrics" {
-    var atlas = try bake(std.testing.allocator, proggy, 16, 256, 256);
+    var atlas = try bake(std.testing.allocator, default_ttf, 16, 256, 256);
     defer atlas.deinit();
 
     // some glyph coverage was written into the atlas
@@ -202,4 +210,13 @@ test "bakes a TTF into a non-empty atlas with sane metrics" {
     // the UserFont measures text via baked advances
     const font = atlas.userFont();
     try std.testing.expect(font.textWidth("Hello") > 0);
+}
+
+test "default font at 13px matches Nuklear's fixed 7px advance" {
+    var atlas = try bakeDefault(std.testing.allocator, 13);
+    defer atlas.deinit();
+    const font = atlas.userFont();
+    // ProggyClean is monospaced; Nuklear's default at 13px advances 7px/glyph.
+    try std.testing.expectEqual(@as(f32, 7), atlas.advance('A'));
+    try std.testing.expectEqual(@as(f32, 35), font.textWidth("Hello"));
 }

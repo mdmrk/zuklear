@@ -179,10 +179,11 @@ backend. `zig build example` / `run-example` now build/run the OpenGL demo.
 Both `stb_rect_pack.h` and `stb_truetype.h` are vendored and compiled as C
 (`src/font/stb.c`); the optional `zuklear_font` module (`src/font/atlas.zig`)
 bakes a TTF into an alpha atlas via `stbtt_PackFontRange`, exposing glyph
-metrics, placement quads (UVs) and a `UserFont`. `zuklear_font.renderText`
-alpha-blits baked glyphs through the software rasterizer's `text_fn` hook, and
-the wio demo uses a baked DroidSans. The core `zuklear` module stays pure Zig;
-libc/stb live only in the opt-in `zuklear_font` module.
+metrics, placement quads (UVs) and a `UserFont`. `zuklear_font.drawListText`
+emits glyph quads for the vertex draw-list, and `bakeDefault` bakes the embedded
+ProggyClean (Nuklear's default font) so the demo matches upstream. The core
+`zuklear` module stays pure Zig; libc/stb live only in the opt-in `zuklear_font`
+module.
 
 (Note: the earlier "port rect_pack to Zig" decision was changed — both stb
 headers are used as C.)

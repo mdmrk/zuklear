@@ -80,18 +80,10 @@ pub fn build(b: *std.Build) void {
         .enable_framebuffer = true,
         .enable_opengl = true,
     })) |wio_dep| {
-        // Shared demo asset (the TTF), embedded once and imported as `assets`.
-        const assets_mod = b.createModule(.{
-            .root_source_file = b.path("examples/font.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-
         const wio_imports = [_]std.Build.Module.Import{
             .{ .name = "zuklear", .module = mod },
             .{ .name = "zuklear_font", .module = font_mod },
             .{ .name = "wio", .module = wio_dep.module("wio") },
-            .{ .name = "assets", .module = assets_mod },
         };
 
         const example = b.addExecutable(.{

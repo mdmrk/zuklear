@@ -25,7 +25,8 @@ vertex draw-list with a wio demo are implemented. See [`PLAN.md`](PLAN.md).
 Widgets: label, button, checkbox, radio, slider, progress, knob, scrollbar,
 selectable, tree, group, combo, menu, image, chart, color picker, single-line
 text edit and numeric property — converted to a vertex draw list via
-`render.vertex` and drawn with OpenGL (baked TrueType font via `zuklear_font`).
+`render.vertex` and drawn with OpenGL (Nuklear's default font, ProggyClean,
+baked via `zuklear_font`).
 
 ## License
 
