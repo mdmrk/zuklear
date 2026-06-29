@@ -48,10 +48,8 @@ pub fn build(b: *std.Build) void {
 
     // The wio demos. wio is a lazy dependency fetched from upstream only when an
     // example step is requested, so `zig build test`/`docs` stay dependency-free.
-    const example_step = b.step("example", "Build the software-rendered wio demo");
-    const run_example_step = b.step("run-example", "Build and run the software demo");
-    const example_gl_step = b.step("example-gl", "Build the OpenGL wio demo");
-    const run_example_gl_step = b.step("run-example-gl", "Build and run the OpenGL demo");
+    const example_step = b.step("example", "Build the wio OpenGL demo");
+    const run_example_step = b.step("run-example", "Build and run the wio OpenGL demo");
 
     if (b.lazyDependency("wio", .{
         .target = target,
@@ -76,7 +74,7 @@ pub fn build(b: *std.Build) void {
         const example = b.addExecutable(.{
             .name = "zuklear-demo",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("examples/wio_software/main.zig"),
+                .root_source_file = b.path("examples/wio_opengl/main.zig"),
                 .target = target,
                 .optimize = optimize,
                 .imports = &wio_imports,
@@ -84,17 +82,5 @@ pub fn build(b: *std.Build) void {
         });
         example_step.dependOn(&b.addInstallArtifact(example, .{}).step);
         run_example_step.dependOn(&b.addRunArtifact(example).step);
-
-        const example_gl = b.addExecutable(.{
-            .name = "zuklear-demo-gl",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("examples/wio_opengl/main.zig"),
-                .target = target,
-                .optimize = optimize,
-                .imports = &wio_imports,
-            }),
-        });
-        example_gl_step.dependOn(&b.addInstallArtifact(example_gl, .{}).step);
-        run_example_gl_step.dependOn(&b.addRunArtifact(example_gl).step);
     }
 }

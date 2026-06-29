@@ -132,37 +132,7 @@ pub fn drawListText(dl: *vertex.DrawList, cmd: Text) anyerror!void {
     }
 }
 
-const software = zk.render.software;
 const Text = zk.command.Text;
-
-/// A `software.Rasterizer.text_fn` that blits baked glyphs **1:1** (one atlas
-/// texel per pixel, no resampling). It recovers the `Atlas` from the text
-/// command's font userdata. Assign it to `rasterizer.text_fn`.
-pub fn renderText(r: *software.Rasterizer, cmd: Text) void {
-    const a: *const Atlas = @ptrCast(@alignCast(cmd.font.userdata.ptr orelse return));
-    var pen_x: f32 = @floatFromInt(cmd.x);
-    const baseline: f32 = @as(f32, @floatFromInt(cmd.y)) + a.ascent;
-    var it: std.unicode.Utf8Iterator = .{ .bytes = cmd.string, .i = 0 };
-    while (it.nextCodepoint()) |cp| {
-        if (a.packed_(cp)) |pc| {
-            // integer top-left of the glyph; copy the source rect texel-for-pixel
-            const dx: i32 = @intFromFloat(@round(pen_x + pc.xoff));
-            const dy: i32 = @intFromFloat(@round(baseline + pc.yoff));
-            var sy: u32 = pc.y0;
-            while (sy < pc.y1) : (sy += 1) {
-                var sx: u32 = pc.x0;
-                while (sx < pc.x1) : (sx += 1) {
-                    const cov = a.bitmap[sy * a.width + sx];
-                    if (cov == 0) continue;
-                    var col = cmd.foreground;
-                    col.a = @intCast((@as(u16, col.a) * cov) / 255);
-                    r.plot(dx + @as(i32, @intCast(sx - pc.x0)), dy + @as(i32, @intCast(sy - pc.y0)), col);
-                }
-            }
-            pen_x += pc.xadvance;
-        }
-    }
-}
 
 /// Bake `ttf` at `pixel_height` into a `width`x`height` alpha atlas
 /// (`stbtt_PackFontRange`).

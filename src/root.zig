@@ -3,9 +3,8 @@
 //! The public entry point: every module is re-exported here so consumers reach
 //! the whole API through `@import("zuklear")`. The usual flow is to drive a
 //! `Context` (windows, layout, widgets) and feed the resulting per-window
-//! `CommandBuffer`s to a renderer — `render.software` (a CPU rasterizer) or
-//! `render.vertex` (a draw list for OpenGL/Vulkan). `builtin_font` supplies an
-//! 8x8 bitmap font; the separate `zuklear_font` package bakes TrueType fonts.
+//! `CommandBuffer`s to a renderer — `render.vertex` produces a draw list for
+//! OpenGL/Vulkan. The separate `zuklear_font` package bakes TrueType fonts.
 //!
 //! The core library is pure Zig with no dependencies. See `PLAN.md` for the map
 //! of which Nuklear modules each file ports.
@@ -34,9 +33,7 @@ pub const selectable = @import("selectable.zig");
 pub const knob = @import("knob.zig");
 pub const color_picker = @import("color_picker.zig");
 pub const text_editor = @import("text_editor.zig");
-pub const builtin_font = @import("font/builtin.zig");
 pub const render = struct {
-    pub const software = @import("render/software.zig");
     pub const vertex = @import("render/vertex.zig");
 };
 pub const Handle = @import("handle.zig").Handle;
@@ -85,7 +82,6 @@ test {
     // Reference every public declaration so each module's `test` blocks are
     // compiled and run. (`render` is a nested namespace, so reach into it.)
     std.testing.refAllDecls(@This());
-    _ = render.software;
     _ = render.vertex;
     _ = @import("handle.zig");
 }

@@ -12,8 +12,7 @@ unions and flag structs.
 
 ```sh
 zig build test            # run the test suite
-zig build run-example     # software-rendered wio demo
-zig build run-example-gl  # OpenGL-rendered wio demo
+zig build run-example     # OpenGL-rendered wio demo
 ```
 
 Requires Zig `0.16.0`. The demo depends on [wio](https://github.com/ypsvlq/wio)
@@ -21,12 +20,12 @@ Requires Zig `0.16.0`. The demo depends on [wio](https://github.com/ypsvlq/wio)
 
 ## Status
 
-Phases 1–4 (foundations, drawing/input, context+layout, widgets) and a software
-renderer with a wio demo are implemented. See [`PLAN.md`](PLAN.md). Widgets:
-label, button, checkbox, radio, slider, progress, knob, scrollbar, selectable,
-tree, group, combo, menu, image, chart, color picker, single-line text edit and
-numeric property — rendered to a window via `render.software` + the built-in
-bitmap font.
+Phases 1–4 (foundations, drawing/input, context+layout, widgets) and the OpenGL
+vertex draw-list with a wio demo are implemented. See [`PLAN.md`](PLAN.md).
+Widgets: label, button, checkbox, radio, slider, progress, knob, scrollbar,
+selectable, tree, group, combo, menu, image, chart, color picker, single-line
+text edit and numeric property — converted to a vertex draw list via
+`render.vertex` and drawn with OpenGL (baked TrueType font via `zuklear_font`).
 
 ## License
 
