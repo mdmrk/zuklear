@@ -26,8 +26,17 @@ const WF_SCALE_LEFT: u32 = 1 << 9;
 
 pub const State = struct {
     show_menu: bool = true,
+    show_app_about: bool = false,
     window_flags: u32 = WF_TITLE | WF_BORDER | WF_SCALABLE | WF_MOVABLE | WF_MINIMIZABLE | WF_SCROLL_AUTO_HIDE,
     disable_widgets: bool = false,
+
+    // menubar
+    mb_mprog: usize = 60,
+    mb_mslider: i32 = 10,
+    mb_mcheck: bool = true,
+    mb_prog: usize = 40,
+    mb_slider: i32 = 10,
+    mb_check: bool = true,
 
     // Widgets > Basic
     checkbox_left_text_left: bool = false,
@@ -86,7 +95,8 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
     const flags: zk.WindowFlags = @bitCast(actual);
 
     if (try ctx.begin("Overview", .init(10, 10, 400, 600), flags)) {
-        // TODO: menubar (needs menubarBegin/End), about popup (blocking popup)
+        if (st.show_menu) try menubar(ctx, st);
+        // TODO: About popup (needs blocking popup); `show_app_about` is tracked.
 
         // --- Window flags ------------------------------------------------
         if (try ctx.treePush(.tab, "Window", .minimized, 1)) {
@@ -137,6 +147,57 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
         if (st.disable_widgets) ctx.widgetDisableEnd();
     }
     ctx.end();
+}
+
+fn menubar(ctx: *zk.Context, st: *State) !void {
+    ctx.menubarBegin();
+
+    // menu #1
+    ctx.layoutRowBegin(.static, 25, 5);
+    ctx.layoutRowPush(45);
+    if (try ctx.menuBeginLabel("MENU", .text_left, .init(120, 200))) {
+        ctx.layoutRowDynamic(25, 1);
+        if (try ctx.menuItemLabel("Hide", .text_left)) st.show_menu = false;
+        if (try ctx.menuItemLabel("About", .text_left)) st.show_app_about = true;
+        _ = try ctx.progress(&st.mb_prog, 100, true);
+        _ = try ctx.sliderInt(0, &st.mb_slider, 16, 1);
+        _ = try ctx.checkboxLabel("check", &st.mb_check);
+        ctx.menuEnd();
+    }
+
+    // menu #2
+    ctx.layoutRowPush(60);
+    if (try ctx.menuBeginLabel("ADVANCED", .text_left, .init(200, 600))) {
+        if (try ctx.treePush(.tab, "FILE", .minimized, 100)) {
+            inline for ([_][]const u8{ "New", "Open", "Save", "Close", "Exit" }) |it| _ = try ctx.menuItemLabel(it, .text_left);
+            ctx.treePop();
+        }
+        if (try ctx.treePush(.tab, "EDIT", .minimized, 101)) {
+            inline for ([_][]const u8{ "Copy", "Delete", "Cut", "Paste" }) |it| _ = try ctx.menuItemLabel(it, .text_left);
+            ctx.treePop();
+        }
+        if (try ctx.treePush(.tab, "VIEW", .minimized, 102)) {
+            inline for ([_][]const u8{ "About", "Options", "Customize" }) |it| _ = try ctx.menuItemLabel(it, .text_left);
+            ctx.treePop();
+        }
+        if (try ctx.treePush(.tab, "CHART", .minimized, 103)) {
+            const values = [_]f32{ 26, 13, 30, 15, 25, 10, 20, 40, 12, 8, 22, 28 };
+            ctx.layoutRowDynamic(150, 1);
+            if (try ctx.chartBegin(.column, values.len, 0, 50)) {
+                for (values) |v| _ = ctx.chartPush(v);
+                ctx.chartEnd();
+            }
+            ctx.treePop();
+        }
+        ctx.menuEnd();
+    }
+
+    // menubar widgets
+    ctx.layoutRowPush(70);
+    _ = try ctx.progress(&st.mb_mprog, 100, true);
+    _ = try ctx.sliderInt(0, &st.mb_mslider, 16, 1);
+    _ = try ctx.checkboxLabel("check", &st.mb_mcheck);
+    ctx.menubarEnd();
 }
 
 fn widgetsText(ctx: *zk.Context) !void {
