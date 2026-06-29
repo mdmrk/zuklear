@@ -137,6 +137,10 @@ pub const ChartEvent = struct { hovering: bool = false, clicked: bool = false };
 
 const chart_max_slot = 4;
 
+/// Seconds of inactivity before `SCROLL_AUTO_HIDE` hides the scrollbars
+/// (`NK_SCROLLBAR_HIDING_TIMEOUT`).
+const scrollbar_hiding_timeout: f32 = 4.0;
+
 const ChartSlot = struct {
     type: ChartType = .lines,
     color: Color = .{},
@@ -547,9 +551,7 @@ pub const Context = struct {
             if (down and in.hasMouseClickDownInRect(.left, header, true) and !clicked) {
                 win.bounds.x += in.mouse.delta.x;
                 win.bounds.y += in.mouse.delta.y;
-                // Keep the recorded click position under the cursor so the
-                // header rect (which moves with the window) still contains it
-                // on the next frame; otherwise the drag cancels mid-move.
+                // move clicked_pos with the window, else the drag cancels mid-move
                 in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.x += in.mouse.delta.x;
                 in.mouse.buttons[@intFromEnum(input_mod.Button.left)].clicked_pos.y += in.mouse.delta.y;
             }
@@ -704,8 +706,30 @@ pub const Context = struct {
         if (!layout.type.isSub()) out.pushScissor(math.null_rect) catch {};
         layout.at_y += layout.row.height;
 
-        // scrollbars (top-level windows, groups and scrollable popups)
-        if (!layout.flags.no_scrollbar and !layout.flags.minimized) {
+        // dynamic panels: shrink to the content height and paint the leftover
+        // padding gaps with the window background (`nk_panel_end` dynamic block)
+        if (layout.flags.dynamic and !layout.flags.minimized) {
+            if (layout.at_y < layout.bounds.y + layout.bounds.h)
+                layout.bounds.h = layout.at_y - layout.bounds.y;
+
+            // top
+            out.fillRect(.{ .x = win.bounds.x, .y = layout.bounds.y, .w = win.bounds.w, .h = panel_padding.y }, 0, s.window.background) catch {};
+            // left
+            out.fillRect(.{ .x = win.bounds.x, .y = layout.bounds.y, .w = panel_padding.x + layout.border, .h = layout.bounds.h }, 0, s.window.background) catch {};
+            // right (widened by the scrollbar when not scrolled)
+            var right: Rect = .{ .x = layout.bounds.x + layout.bounds.w, .y = layout.bounds.y, .w = panel_padding.x + layout.border, .h = layout.bounds.h };
+            if (layout.offset_y.* == 0 and !layout.flags.no_scrollbar) right.w += scrollbar_size.x;
+            out.fillRect(right, 0, s.window.background) catch {};
+            // bottom
+            if (layout.footer_height > 0)
+                out.fillRect(.{ .x = win.bounds.x, .y = layout.bounds.y + layout.bounds.h, .w = win.bounds.w, .h = layout.footer_height }, 0, s.window.background) catch {};
+        }
+
+        // scrollbars (top-level windows, groups and scrollable popups); the
+        // hiding timer suppresses them once `SCROLL_AUTO_HIDE` has elapsed
+        if (!layout.flags.no_scrollbar and !layout.flags.minimized and
+            win.scrollbar_hiding_timer < scrollbar_hiding_timeout)
+        {
             const in_sb: ?*Input = if (layout.flags.rom or layout.flags.no_input) null else &ctx.input;
             const has_scrolling = if (layout.type.isSub())
                 (layout.has_scrolling and in_sb != null and ctx.input.isMouseHoveringRect(layout.bounds))
@@ -737,6 +761,17 @@ pub const Context = struct {
             const hnew = scrollbar_widget.doScrollbarH(&ctx.last_widget_state, out, hscroll, has_scrolling, hoff, htarget, layout.max_x * 0.05, layout.max_x * 0.005, &s.scrollh, in_sb, font) catch hoff;
             layout.offset_x.* = @intFromFloat(@max(0, hnew));
         }
+
+        // hide the scrollbars after a period without input (`SCROLL_AUTO_HIDE`)
+        if (win.flags.scroll_auto_hide) {
+            const has_input = ctx.input.isMouseMoved() or ctx.input.mouse.scroll_delta.y != 0;
+            const is_window_hovered = !win.flags.hidden and ctx.input.isMouseHoveringRect(win.bounds);
+            const any_item_active = ctx.last_widget_state.modified;
+            if ((!has_input and is_window_hovered) or (!is_window_hovered and !any_item_active))
+                win.scrollbar_hiding_timer += ctx.delta_time_seconds
+            else
+                win.scrollbar_hiding_timer = 0;
+        } else win.scrollbar_hiding_timer = 0;
 
         // window resize scaler (bottom-right grip)
         if (layout.flags.scalable and !layout.flags.minimized and !layout.flags.no_input) {
@@ -1210,6 +1245,43 @@ pub const Context = struct {
         return ctx.buttonTextStyled(&ctx.style.button, title);
     }
 
+    /// Set the activation timing of subsequent buttons (`nk_button_set_behavior`).
+    pub fn buttonSetBehavior(ctx: *Context, b: ButtonBehavior) void {
+        ctx.button_behavior = b;
+    }
+
+    /// A symbol-only button (`nk_button_symbol`).
+    pub fn buttonSymbol(ctx: *Context, sym: style_mod.Symbol) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return button_widget.doButtonSymbol(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, sym, ctx.button_behavior, &ctx.style.button, ctx.widgetInput(w.state), ctx.style.font.?);
+    }
+
+    /// A button with a symbol and a centered label (`nk_button_symbol_label`).
+    pub fn buttonSymbolLabel(ctx: *Context, sym: style_mod.Symbol, title: []const u8, alignment: Align) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return button_widget.doButtonTextSymbol(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, sym, title, alignment, ctx.button_behavior, &ctx.style.button, ctx.style.font.?, ctx.widgetInput(w.state));
+    }
+
+    /// A solid-color button (`nk_button_color`): the value swatch used by the
+    /// color contextual in the demo.
+    pub fn buttonColor(ctx: *Context, col: Color) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        var btn = ctx.style.button;
+        btn.normal = .{ .color = col };
+        btn.hover = .{ .color = col };
+        btn.active = .{ .color = col };
+        const out = win.layout.?.buffer;
+        const r = button_widget.doButton(&ctx.last_widget_state, w.bounds, &btn, ctx.widgetInput(w.state), ctx.button_behavior);
+        _ = try button_widget.drawButton(out, w.bounds, ctx.last_widget_state, &btn);
+        return r.clicked;
+    }
+
     // --- toggle widgets ---------------------------------------------------
 
     fn widgetInput(ctx: *Context, state: WidgetLayoutState) ?*const Input {
@@ -1564,6 +1636,19 @@ pub const Context = struct {
         return (rune >= '0' and rune <= '9') or rune == '.' or rune == '-' or rune == '+' or rune == 'e' or rune == 'E';
     }
 
+    /// Format a property value the way Nuklear does (`nk_dtoa` +
+    /// `nk_string_float_limit` to `NK_MAX_FLOAT_PRECISION`=2): shortest decimal,
+    /// at most two fractional digits, no trailing zeros. Integral values render
+    /// without a decimal point, so `nk_property_int` shows "10" (not "10.00").
+    fn formatProperty(buf: []u8, value: f32) []const u8 {
+        var str: []const u8 = std.fmt.bufPrint(buf, "{d:.2}", .{value}) catch return "?";
+        if (std.mem.indexOfScalar(u8, str, '.') != null) {
+            str = std.mem.trimEnd(u8, str, "0");
+            str = std.mem.trimEnd(u8, str, ".");
+        }
+        return str;
+    }
+
     /// A labelled numeric field: drag the middle to change the value by
     /// `inc_per_pixel`, click the −/+ buttons by `step`, or click the value to
     /// type it directly (`nk_property_float`). Returns whether it changed.
@@ -1656,7 +1741,7 @@ pub const Context = struct {
             try out.fillRect(.init(value_rect.x + cx, value_rect.y, 1, value_rect.h), 0, s.label_normal);
         } else {
             var nbuf: [64]u8 = undefined;
-            const vstr = std.fmt.bufPrint(&nbuf, "{d:.2}", .{value.*}) catch "?";
+            const vstr = formatProperty(&nbuf, value.*);
             try text_widget.widgetText(out, value_rect, vstr, .{ .left = true, .middle = true }, .init(0, 0), .{ .a = 0 }, s.label_normal, font);
         }
 
@@ -1670,6 +1755,125 @@ pub const Context = struct {
         const changed = try ctx.propertyFloat(name, @floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step), inc_per_pixel);
         value.* = @intFromFloat(@round(f));
         return changed;
+    }
+
+    // --- demo convenience wrappers ----------------------------------------
+
+    /// An integer slider (`nk_slider_int`).
+    pub fn sliderInt(ctx: *Context, min: i32, value: *i32, max: i32, step: i32) !bool {
+        var f: f32 = @floatFromInt(value.*);
+        const changed = try ctx.sliderFloat(@floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step));
+        value.* = @intFromFloat(f);
+        return changed;
+    }
+
+    /// An integer slider returning the new value (`nk_slide_int`).
+    pub fn slideInt(ctx: *Context, min: i32, val: i32, max: i32, step: i32) !i32 {
+        var v = val;
+        _ = try ctx.sliderInt(min, &v, max, step);
+        return v;
+    }
+
+    /// An integer knob (`nk_knob_int`).
+    pub fn knobInt(ctx: *Context, min: i32, value: *i32, max: i32, step: i32, zero_direction: math.Heading, dead_zone_percent: f32) !bool {
+        var f: f32 = @floatFromInt(value.*);
+        const changed = try ctx.knobFloat(@floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step), zero_direction, dead_zone_percent);
+        value.* = @intFromFloat(@round(f));
+        return changed;
+    }
+
+    /// A property returning the new float value (`nk_propertyf`).
+    pub fn propertyf(ctx: *Context, name: []const u8, min: f32, val: f32, max: f32, step: f32, inc_per_pixel: f32) !f32 {
+        var v = val;
+        _ = try ctx.propertyFloat(name, min, &v, max, step, inc_per_pixel);
+        return v;
+    }
+
+    /// A property returning the new int value (`nk_propertyi`).
+    pub fn propertyi(ctx: *Context, name: []const u8, min: i32, val: i32, max: i32, step: i32, inc_per_pixel: f32) !i32 {
+        var v = val;
+        _ = try ctx.propertyInt(name, min, &v, max, step, inc_per_pixel);
+        return v;
+    }
+
+    /// A labelled checkbox with explicit widget/text alignment
+    /// (`nk_checkbox_label_align`).
+    pub fn checkboxLabelAlign(ctx: *Context, lbl: []const u8, active: *bool, widget_alignment: Align, text_alignment: Align) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return toggle_widget.doToggle(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, active, lbl, .check, &ctx.style.checkbox, ctx.widgetInput(w.state), ctx.style.font.?, widget_alignment, text_alignment);
+    }
+
+    /// A labelled radio option with explicit alignment (`nk_option_label_align`).
+    pub fn optionLabelAlign(ctx: *Context, lbl: []const u8, active: bool, widget_alignment: Align, text_alignment: Align) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return active;
+        var a = active;
+        _ = try toggle_widget.doToggle(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, &a, lbl, .option, &ctx.style.option, ctx.widgetInput(w.state), ctx.style.font.?, widget_alignment, text_alignment);
+        return a;
+    }
+
+    /// Toggle the bits `value` in `flags` via a checkbox; returns whether it
+    /// changed (`nk_checkbox_flags_label`).
+    pub fn checkboxFlagsLabel(ctx: *Context, lbl: []const u8, flags: *u32, value: u32) !bool {
+        var active = (flags.* & value) == value;
+        if (try ctx.checkboxLabel(lbl, &active)) {
+            if (active) flags.* |= value else flags.* &= ~value;
+            return true;
+        }
+        return false;
+    }
+
+    /// Disable subsequent widgets in this window until `widgetDisableEnd`; they
+    /// are drawn but not interactive (`nk_widget_disable_begin`).
+    pub fn widgetDisableBegin(ctx: *Context) void {
+        ctx.current.?.widgets_disabled = true;
+    }
+
+    /// Re-enable widgets (`nk_widget_disable_end`).
+    pub fn widgetDisableEnd(ctx: *Context) void {
+        ctx.current.?.widgets_disabled = false;
+    }
+
+    /// True if the named window does not exist or has been closed/hidden
+    /// (`nk_window_is_closed`).
+    pub fn windowIsClosed(ctx: *Context, name: []const u8) bool {
+        const win = ctx.lookup.get(name) orelse return true;
+        return win.flags.closed or win.flags.hidden;
+    }
+
+    /// Draw greedily word-wrapped text in the next layout slot (`nk_label_wrap`).
+    pub fn labelWrap(ctx: *Context, str: []const u8) !void {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return;
+        const out = win.layout.?.buffer;
+        const font = ctx.style.font.?;
+        const s = &ctx.style;
+        const area = w.bounds.pad(s.text.padding);
+        const line_h = font.height;
+        const fg = s.text.color;
+        const bg = s.window.background;
+
+        var y = area.y;
+        var start: usize = 0;
+        var last_space: ?usize = null;
+        var i: usize = 0;
+        while (i < str.len) : (i += 1) {
+            if (str[i] == ' ') last_space = i;
+            if (font.textWidth(str[start .. i + 1]) > area.w and i > start) {
+                const brk = if (last_space != null and last_space.? > start) last_space.? else i;
+                if (y + line_h <= area.y + area.h)
+                    try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = line_h }, str[start..brk], .{ .left = true, .top = true }, .init(0, 0), bg, fg, font);
+                y += line_h;
+                start = if (brk == last_space) brk + 1 else brk;
+                last_space = null;
+            }
+        }
+        if (start < str.len and y + line_h <= area.y + area.h)
+            try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = line_h }, str[start..], .{ .left = true, .top = true }, .init(0, 0), bg, fg, font);
     }
 
     // --- chart ------------------------------------------------------------

@@ -143,6 +143,43 @@ pub fn doButtonSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Sy
     return r.clicked;
 }
 
+fn drawButtonTextSymbol(out: *CommandBuffer, bounds: Rect, label: Rect, sym_rect: Rect, state: States, style: *const StyleButton, str: []const u8, sym: Symbol, font: *const UserFont) !void {
+    const bg = try drawButton(out, bounds, state, style);
+    const text_bg = switch (bg) {
+        .color => |col| col,
+        else => style.text_background,
+    };
+    var fg = if (state.hover)
+        style.text_hover
+    else if (state.actived)
+        style.text_active
+    else
+        style.text_normal;
+    fg = fg.factor(style.color_factor_text);
+    try symbol_mod.drawSymbol(out, sym, sym_rect, style.text_background, fg, style.border, font);
+    try text_widget.widgetText(out, label, str, .{ .middle = true, .centered = true }, .init(0, 0), text_bg, fg, font);
+}
+
+/// Draw a button with both a symbol and a centered label, reporting whether it
+/// was clicked (`nk_do_button_text_symbol`).
+pub fn doButtonTextSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: Symbol, str: []const u8, text_alignment: Align, b: ButtonBehavior, style: *const StyleButton, font: *const UserFont, in: ?*const Input) !bool {
+    const r = doButton(state, bounds, style, in, b);
+    const content = r.content;
+    var tri: Rect = .{
+        .y = content.y + content.h / 2 - font.height / 2,
+        .w = font.height,
+        .h = font.height,
+    };
+    if (text_alignment.left) {
+        tri.x = @max((content.x + content.w) - (2 * style.padding.x + tri.w), 0);
+    } else tri.x = content.x + 2 * style.padding.x;
+
+    if (style.draw_begin) |cb| cb(out, style.userdata);
+    try drawButtonTextSymbol(out, bounds, content, tri, state.*, style, str, sym, font);
+    if (style.draw_end) |cb| cb(out, style.userdata);
+    return r.clicked;
+}
+
 // --- tests ---------------------------------------------------------------
 
 fn testWidth(_: @import("handle.zig").Handle, _: f32, t: []const u8) f32 {
