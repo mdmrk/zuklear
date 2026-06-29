@@ -60,6 +60,16 @@ pub const State = struct {
     range_int_value: i32 = 2048,
     range_int_max: i32 = 4096,
 
+    // Widgets > Combo
+    cmb_weapon: usize = 0,
+    cmb_color: Color = .{ .r = 130, .g = 50, .b = 50, .a = 255 },
+    cmb_color2: zk.Colorf = .{ .r = 0.509, .g = 0.705, .b = 0.2, .a = 1.0 },
+    cmb_col_mode: i32 = 0, // 0 = RGB, 1 = HSV
+    cmb_check: [5]bool = [_]bool{false} ** 5,
+    cmb_prog: [4]usize = .{ 20, 40, 10, 90 },
+    cmb_chart_sel: f32 = 8.0,
+    cmb_position: [3]f32 = .{ 0, 0, 0 },
+
     // Widgets > Inactive
     inactive: bool = true,
 
@@ -90,6 +100,15 @@ pub const State = struct {
     complex_rt: [4]bool = [_]bool{false} ** 4,
     complex_rc: [4]bool = [_]bool{false} ** 4,
     complex_rb: [4]bool = [_]bool{false} ** 4,
+
+    // Layout > Notebook / Splitter
+    nb_current_tab: i32 = 0,
+    split_va: f32 = 100,
+    split_vb: f32 = 100,
+    split_vc: f32 = 100,
+    split_ha: f32 = 100,
+    split_hb: f32 = 100,
+    split_hc: f32 = 100,
 };
 
 const A = 0;
@@ -138,7 +157,9 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
             try widgetsBasic(ctx, st);
             try widgetsInactive(ctx, st);
             try widgetsSelectable(ctx, st);
-            // TODO: Combo, Input, Horizontal Rule
+            try widgetsCombo(ctx, st);
+            try widgetsHorizontalRule(ctx);
+            // TODO: Input (edit) — needs editString + filters
             ctx.treePop();
         }
 
@@ -152,9 +173,11 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
         if (try ctx.treePush(.tab, "Layout", .minimized, 4)) {
             try layoutWidget(ctx);
             try layoutGroup(ctx, st);
+            try layoutNotebook(ctx, st);
             try layoutSimple(ctx, st);
             try layoutComplex(ctx, st);
-            // TODO: Tree, Notebook, Splitter
+            try layoutSplitter(ctx, st);
+            // TODO: Tree (needs treeElementPush + selectableSymbolLabel)
             ctx.treePop();
         }
 
@@ -357,6 +380,117 @@ fn widgetsSelectable(ctx: *zk.Context, st: *State) !void {
             }
             ctx.treePop();
         }
+        ctx.treePop();
+    }
+}
+
+fn widgetsCombo(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.node, "Combo", .minimized, 17)) {
+        var buf: [64]u8 = undefined;
+        const weapons = [_][]const u8{ "Fist", "Pistol", "Shotgun", "Plasma", "BFG" };
+
+        // default combobox
+        ctx.layoutRowStatic(25, 200, 1);
+        st.cmb_weapon = try ctx.combo(&weapons, st.cmb_weapon, 25, .init(200, 200));
+
+        // slider color combobox
+        if (try ctx.comboBeginColor(st.cmb_color, .init(200, 200))) {
+            const ratios = [_]f32{ 0.15, 0.85 };
+            ctx.layoutRow(.dynamic, 30, &ratios);
+            try ctx.label("R:", .text_left);
+            st.cmb_color.r = @intCast(try ctx.slideInt(0, st.cmb_color.r, 255, 5));
+            try ctx.label("G:", .text_left);
+            st.cmb_color.g = @intCast(try ctx.slideInt(0, st.cmb_color.g, 255, 5));
+            try ctx.label("B:", .text_left);
+            st.cmb_color.b = @intCast(try ctx.slideInt(0, st.cmb_color.b, 255, 5));
+            try ctx.label("A:", .text_left);
+            st.cmb_color.a = @intCast(try ctx.slideInt(0, st.cmb_color.a, 255, 5));
+            ctx.comboEnd();
+        }
+
+        // complex color combobox (picker + RGB/HSV properties)
+        if (try ctx.comboBeginColor(st.cmb_color2.toColor(), .init(200, 400))) {
+            ctx.layoutRowDynamic(120, 1);
+            _ = try ctx.colorPick(&st.cmb_color2, .rgba);
+            ctx.layoutRowDynamic(25, 2);
+            if (try ctx.optionLabel("RGB", st.cmb_col_mode == 0)) st.cmb_col_mode = 0;
+            if (try ctx.optionLabel("HSV", st.cmb_col_mode == 1)) st.cmb_col_mode = 1;
+            ctx.layoutRowDynamic(25, 1);
+            if (st.cmb_col_mode == 0) {
+                st.cmb_color2.r = try ctx.propertyf("#R:", 0, st.cmb_color2.r, 1.0, 0.01, 0.005);
+                st.cmb_color2.g = try ctx.propertyf("#G:", 0, st.cmb_color2.g, 1.0, 0.01, 0.005);
+                st.cmb_color2.b = try ctx.propertyf("#B:", 0, st.cmb_color2.b, 1.0, 0.01, 0.005);
+                st.cmb_color2.a = try ctx.propertyf("#A:", 0, st.cmb_color2.a, 1.0, 0.01, 0.005);
+            } else {
+                const hsva = st.cmb_color2.toHsva();
+                var h = [4]f32{ hsva.h, hsva.s, hsva.v, hsva.a };
+                h[0] = try ctx.propertyf("#H:", 0, h[0], 1.0, 0.01, 0.05);
+                h[1] = try ctx.propertyf("#S:", 0, h[1], 1.0, 0.01, 0.05);
+                h[2] = try ctx.propertyf("#V:", 0, h[2], 1.0, 0.01, 0.05);
+                h[3] = try ctx.propertyf("#A:", 0, h[3], 1.0, 0.01, 0.05);
+                st.cmb_color2 = zk.Colorf.fromHsva(h[0], h[1], h[2], h[3]);
+            }
+            ctx.comboEnd();
+        }
+
+        // progressbar combobox
+        const sum = st.cmb_prog[0] + st.cmb_prog[1] + st.cmb_prog[2] + st.cmb_prog[3];
+        if (try ctx.comboBeginLabel(try std.fmt.bufPrint(&buf, "{d}", .{sum}), .init(200, 200))) {
+            ctx.layoutRowDynamic(30, 1);
+            for (&st.cmb_prog) |*p| _ = try ctx.progress(p, 100, true);
+            ctx.comboEnd();
+        }
+
+        // checkbox combobox
+        var csum: usize = 0;
+        for (st.cmb_check[0..4]) |c| csum += @intFromBool(c);
+        if (try ctx.comboBeginLabel(try std.fmt.bufPrint(&buf, "{d}", .{csum}), .init(200, 200))) {
+            ctx.layoutRowDynamic(30, 1);
+            _ = try ctx.checkboxLabel(weapons[0], &st.cmb_check[0]);
+            _ = try ctx.checkboxLabel(weapons[1], &st.cmb_check[1]);
+            _ = try ctx.checkboxLabel(weapons[2], &st.cmb_check[2]);
+            _ = try ctx.checkboxLabel(weapons[3], &st.cmb_check[3]);
+            ctx.comboEnd();
+        }
+
+        // complex text combobox (xyz position)
+        if (try ctx.comboBeginLabel(try std.fmt.bufPrint(&buf, "{d:.2}, {d:.2}, {d:.2}", .{ st.cmb_position[0], st.cmb_position[1], st.cmb_position[2] }), .init(200, 200))) {
+            ctx.layoutRowDynamic(25, 1);
+            _ = try ctx.propertyFloat("#X:", -1024, &st.cmb_position[0], 1024, 1, 0.5);
+            _ = try ctx.propertyFloat("#Y:", -1024, &st.cmb_position[1], 1024, 1, 0.5);
+            _ = try ctx.propertyFloat("#Z:", -1024, &st.cmb_position[2], 1024, 1, 0.5);
+            ctx.comboEnd();
+        }
+
+        // chart combobox
+        if (try ctx.comboBeginLabel(try std.fmt.bufPrint(&buf, "{d:.1}", .{st.cmb_chart_sel}), .init(200, 250))) {
+            const values = [_]f32{ 26, 13, 30, 15, 25, 10, 20, 40, 12, 8, 22, 28, 5 };
+            ctx.layoutRowDynamic(150, 1);
+            if (try ctx.chartBegin(.column, values.len, 0, 50)) {
+                for (values) |v| {
+                    const res = ctx.chartPush(v);
+                    if (res.clicked) {
+                        st.cmb_chart_sel = v;
+                        ctx.comboClose();
+                    }
+                }
+                ctx.chartEnd();
+            }
+            ctx.comboEnd();
+        }
+        // TODO: time/date pickers (need date math + spacing grid)
+        ctx.treePop();
+    }
+}
+
+fn widgetsHorizontalRule(ctx: *zk.Context) !void {
+    if (try ctx.treePush(.node, "Horizontal Rule", .minimized, 18)) {
+        ctx.layoutRowDynamic(12, 1);
+        try ctx.label("Use this to subdivide spaces visually", .text_left);
+        ctx.layoutRowDynamic(4, 1);
+        try ctx.ruleHorizontal(Color.white, true);
+        ctx.layoutRowDynamic(75, 1);
+        try ctx.labelWrap("Best used in 'Card'-like layouts, with a bigger title font on top. Takes on the size of the previous layout definition. Rounding optional.");
         ctx.treePop();
     }
 }
@@ -658,6 +792,152 @@ fn layoutComplex(ctx: *zk.Context, st: *State) !void {
         }
 
         ctx.layoutSpaceEnd();
+        ctx.treePop();
+    }
+}
+
+const tiles = [_][]const u8{ "#FFAA", "#FFBB", "#FFCC", "#FFDD", "#FFEE", "#FFFF" };
+
+fn layoutNotebook(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.node, "Notebook", .minimized, 44)) {
+        const step = (2.0 * std.math.pi) / 32.0;
+        const names = [_][]const u8{ "Lines", "Columns", "Mixed" };
+        const font = ctx.style.font.?;
+
+        // header tabs (no spacing, square buttons)
+        ctx.stylePushVec2(&ctx.style.window.spacing, .init(0, 0));
+        ctx.stylePushFloat(&ctx.style.button.rounding, 0);
+        ctx.layoutRowBegin(.static, 20, 3);
+        for (names, 0..) |name, i| {
+            const widget_width = font.textWidth(name) + 3 * ctx.style.button.padding.x;
+            ctx.layoutRowPush(widget_width);
+            if (st.nb_current_tab == @as(i32, @intCast(i))) {
+                const bc = ctx.style.button.normal;
+                ctx.style.button.normal = ctx.style.button.active;
+                if (try ctx.buttonLabel(name)) st.nb_current_tab = @intCast(i);
+                ctx.style.button.normal = bc;
+            } else if (try ctx.buttonLabel(name)) st.nb_current_tab = @intCast(i);
+        }
+        ctx.stylePopFloat();
+
+        // body
+        ctx.layoutRowDynamic(140, 1);
+        const red = Color.rgb(255, 0, 0);
+        const dred = Color.rgb(150, 0, 0);
+        if (try ctx.groupBegin("Notebook", @bitCast(WF_BORDER))) {
+            ctx.stylePopVec2();
+            var id: f32 = 0;
+            ctx.layoutRowDynamic(100, 1);
+            switch (st.nb_current_tab) {
+                0 => if (try ctx.chartBeginColored(.lines, red, dred, 32, 0, 1)) {
+                    ctx.chartAddSlotColored(.lines, Color.rgb(0, 0, 255), Color.rgb(0, 0, 150), 32, -1, 1);
+                    for (0..32) |_| {
+                        _ = ctx.chartPushSlot(@abs(@sin(id)), 0);
+                        _ = ctx.chartPushSlot(@cos(id), 1);
+                        id += step;
+                    }
+                    ctx.chartEnd();
+                },
+                1 => if (try ctx.chartBeginColored(.column, red, dred, 32, 0, 1)) {
+                    for (0..32) |_| {
+                        _ = ctx.chartPushSlot(@abs(@sin(id)), 0);
+                        id += step;
+                    }
+                    ctx.chartEnd();
+                },
+                else => if (try ctx.chartBeginColored(.lines, red, dred, 32, 0, 1)) {
+                    ctx.chartAddSlotColored(.lines, Color.rgb(0, 0, 255), Color.rgb(0, 0, 150), 32, -1, 1);
+                    ctx.chartAddSlotColored(.column, Color.rgb(0, 255, 0), Color.rgb(0, 150, 0), 32, 0, 1);
+                    for (0..32) |_| {
+                        _ = ctx.chartPushSlot(@abs(@sin(id)), 0);
+                        _ = ctx.chartPushSlot(@abs(@cos(id)), 1);
+                        _ = ctx.chartPushSlot(@abs(@sin(id)), 2);
+                        id += step;
+                    }
+                    ctx.chartEnd();
+                },
+            }
+            ctx.groupEnd();
+        } else ctx.stylePopVec2();
+        ctx.treePop();
+    }
+}
+
+fn tileGroup(ctx: *zk.Context, name: []const u8, flags: u32, cols: i32) !void {
+    if (try ctx.groupBegin(name, @bitCast(flags))) {
+        ctx.layoutRowDynamic(25, cols);
+        inline for (tiles) |t| _ = try ctx.buttonLabel(t);
+        ctx.groupEnd();
+    }
+}
+
+fn layoutSplitter(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.node, "Splitter", .minimized, 45)) {
+        const in = &ctx.input;
+        ctx.layoutRowStatic(20, 320, 1);
+        try ctx.label("Use slider and spinner to change tile size", .text_left);
+        try ctx.label("Drag the space between tiles to change tile ratio", .text_left);
+
+        if (try ctx.treePush(.node, "Vertical", .minimized, 46)) {
+            const row_layout = [_]f32{ st.split_va, 8, st.split_vb, 8, st.split_vc };
+            ctx.layoutRowStatic(30, 100, 2);
+            try ctx.label("left:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_va, 200, 10);
+            try ctx.label("middle:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_vb, 200, 10);
+            try ctx.label("right:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_vc, 200, 10);
+
+            ctx.layoutRow(.static, 200, &row_layout);
+            try tileGroup(ctx, "left", WF_NO_SCROLLBAR | WF_BORDER, 1);
+            var bounds = ctx.widgetBounds();
+            ctx.spacing(1);
+            if ((in.isMouseHoveringRect(bounds) or in.isMousePrevHoveringRect(bounds)) and in.isMouseDown(.left)) {
+                st.split_va = row_layout[0] + in.mouse.delta.x;
+                st.split_vb = row_layout[2] - in.mouse.delta.x;
+            }
+            try tileGroup(ctx, "center", WF_BORDER | WF_NO_SCROLLBAR, 1);
+            bounds = ctx.widgetBounds();
+            ctx.spacing(1);
+            if ((in.isMouseHoveringRect(bounds) or in.isMousePrevHoveringRect(bounds)) and in.isMouseDown(.left)) {
+                st.split_vb = row_layout[2] + in.mouse.delta.x;
+                st.split_vc = row_layout[4] - in.mouse.delta.x;
+            }
+            try tileGroup(ctx, "right", WF_BORDER | WF_NO_SCROLLBAR, 1);
+            ctx.treePop();
+        }
+
+        if (try ctx.treePush(.node, "Horizontal", .minimized, 47)) {
+            ctx.layoutRowStatic(30, 100, 2);
+            try ctx.label("top:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_ha, 200, 10);
+            try ctx.label("middle:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_hb, 200, 10);
+            try ctx.label("bottom:", .text_left);
+            _ = try ctx.sliderFloat(10, &st.split_hc, 200, 10);
+
+            ctx.layoutRowDynamic(st.split_ha, 1);
+            try tileGroup(ctx, "top", WF_NO_SCROLLBAR | WF_BORDER, 3);
+            ctx.layoutRowDynamic(8, 1);
+            var bounds = ctx.widgetBounds();
+            ctx.spacing(1);
+            if ((in.isMouseHoveringRect(bounds) or in.isMousePrevHoveringRect(bounds)) and in.isMouseDown(.left)) {
+                st.split_ha += in.mouse.delta.y;
+                st.split_hb -= in.mouse.delta.y;
+            }
+            ctx.layoutRowDynamic(st.split_hb, 1);
+            try tileGroup(ctx, "middle", WF_NO_SCROLLBAR | WF_BORDER, 3);
+            ctx.layoutRowDynamic(8, 1);
+            bounds = ctx.widgetBounds();
+            ctx.spacing(1);
+            if ((in.isMouseHoveringRect(bounds) or in.isMousePrevHoveringRect(bounds)) and in.isMouseDown(.left)) {
+                st.split_hb += in.mouse.delta.y;
+                st.split_hc -= in.mouse.delta.y;
+            }
+            ctx.layoutRowDynamic(st.split_hc, 1);
+            try tileGroup(ctx, "bottom", WF_NO_SCROLLBAR | WF_BORDER, 3);
+            ctx.treePop();
+        }
         ctx.treePop();
     }
 }
