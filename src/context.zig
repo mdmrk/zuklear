@@ -101,6 +101,31 @@ pub const TreeType = enum { node, tab };
 /// Blocking-popup sizing mode (`enum nk_popup_type`).
 pub const PopupType = enum { static, dynamic };
 
+/// Built-in text-input filters for `editString` (`nk_filter_*`).
+pub const filters = struct {
+    pub fn default(_: u21) bool {
+        return true;
+    }
+    pub fn ascii(c: u21) bool {
+        return c <= 128;
+    }
+    pub fn decimal(c: u21) bool {
+        return (c >= '0' and c <= '9') or c == '-';
+    }
+    pub fn float(c: u21) bool {
+        return (c >= '0' and c <= '9') or c == '.' or c == '-';
+    }
+    pub fn hex(c: u21) bool {
+        return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
+    }
+    pub fn oct(c: u21) bool {
+        return c >= '0' and c <= '7';
+    }
+    pub fn binary(c: u21) bool {
+        return c == '0' or c == '1';
+    }
+};
+
 /// Text-edit option flags (`enum nk_edit_flags`).
 pub const EditFlags = packed struct(u32) {
     read_only: bool = false,
@@ -361,6 +386,9 @@ pub const Context = struct {
     style_float: [style_stack_size]StyleFloatEntry = undefined,
     style_float_len: usize = 0,
 
+    /// Persistent per-field text editors for `editString`, keyed by buffer ptr.
+    edits: std.AutoHashMapUnmanaged(usize, *text_editor.TextEdit) = .empty,
+
     pub fn init(allocator: std.mem.Allocator, font: ?*const UserFont) Context {
         var s: Style = .default();
         if (font) |f| s.font = f;
@@ -369,6 +397,12 @@ pub const Context = struct {
 
     pub fn deinit(ctx: *Context) void {
         if (ctx.prop_edit) |*pe| pe.deinit();
+        var it = ctx.edits.valueIterator();
+        while (it.next()) |ed| {
+            ed.*.deinit();
+            ctx.allocator.destroy(ed.*);
+        }
+        ctx.edits.deinit(ctx.allocator);
         for (ctx.windows.items) |w| ctx.destroyWindow(w);
         ctx.windows.deinit(ctx.allocator);
         ctx.lookup.deinit(ctx.allocator);
@@ -1416,6 +1450,14 @@ pub const Context = struct {
         return selectable_widget.doSelectable(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
+    /// A selectable row with a symbol icon (`nk_selectable_symbol_label`).
+    pub fn selectableSymbolLabel(ctx: *Context, sym: style_mod.Symbol, str: []const u8, alignment: Align, value: *bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return selectable_widget.doSelectableSymbol(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, sym, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
+    }
+
     // --- color picker -----------------------------------------------------
 
     /// A color picker (SV matrix + hue/alpha bars); updates `col`, returns
@@ -1663,6 +1705,36 @@ pub const Context = struct {
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
             try out.fillRect(.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
         }
+    }
+
+    /// An edit field backed by a caller-owned `buffer`/`len`, applying `filter`
+    /// to typed input (`nk_edit_string`). The editor state persists across frames
+    /// keyed by `buffer.ptr`.
+    pub fn editString(ctx: *Context, flags: EditFlags, buffer: []u8, len: *usize, filter: ?text_editor.Filter) !EditEvents {
+        const id = @intFromPtr(buffer.ptr);
+        const gop = try ctx.edits.getOrPut(ctx.allocator, id);
+        if (!gop.found_existing) {
+            const ed = try ctx.allocator.create(text_editor.TextEdit);
+            ed.* = try text_editor.TextEdit.init(ctx.allocator, @max(buffer.len, 16));
+            gop.value_ptr.* = ed;
+        }
+        const editor = gop.value_ptr.*;
+        editor.filter = filter;
+        // when not focused, mirror the caller's buffer into the editor so
+        // external changes show up
+        if (!editor.active) {
+            editor.string.clear();
+            editor.string.appendBytes(buffer[0..len.*]) catch {};
+            const n = editor.string.glyphLen();
+            if (editor.cursor > n) editor.cursor = n;
+        }
+        const ev = try ctx.editBuffer(flags, editor);
+        // mirror the editor back into the caller's buffer
+        const b = editor.string.bytes();
+        const n = @min(b.len, buffer.len);
+        @memcpy(buffer[0..n], b[0..n]);
+        len.* = n;
+        return ev;
     }
 
     // --- property (numeric field) -----------------------------------------
@@ -2190,7 +2262,7 @@ pub const Context = struct {
 
     // --- tree -------------------------------------------------------------
 
-    fn treeStateBase(ctx: *Context, ttype: TreeType, img: ?image_mod.Image, title: []const u8, state: *bool) !bool {
+    fn treeStateBase(ctx: *Context, ttype: TreeType, img: ?image_mod.Image, title: []const u8, state: *bool, selected: ?*bool) !bool {
         const win = ctx.current.?;
         const layout = win.layout.?;
         const s = &ctx.style;
@@ -2240,13 +2312,21 @@ pub const Context = struct {
 
         // label
         header.w = @max(header.w, sym.w + item_spacing.x);
-        const label_rect: Rect = .{
+        var label_rect: Rect = .{
             .x = sym.x + sym.w + item_spacing.x,
             .y = sym.y,
             .w = header.w - (sym.w + item_spacing.y + s.tab.indent),
             .h = font.height,
         };
-        try text_widget.widgetText(out, label_rect, title, Align.text_left, .init(0, 0), text_bg, s.tab.text.factor(s.tab.color_factor), font);
+        if (selected) |sel| {
+            // element variant: the label is a selectable toggling `selected`
+            const text_width = font.textWidth(title) + 4 * s.selectable.padding.x;
+            label_rect.w = @min(label_rect.w, text_width);
+            var dummy: widget_mod.States = .{};
+            _ = try selectable_widget.doSelectable(&dummy, out, label_rect, title, Align.text_left, sel, &s.selectable, in, font);
+        } else {
+            try text_widget.widgetText(out, label_rect, title, Align.text_left, .init(0, 0), text_bg, s.tab.text.factor(s.tab.color_factor), font);
+        }
 
         if (state.*) {
             const off_x: f32 = @floatFromInt(layout.offset_x.*);
@@ -2266,9 +2346,25 @@ pub const Context = struct {
         const win = ctx.current.?;
         const key = std.hash.Murmur3_32.hashWithSeed(title, seed);
         var collapse = if (win.state.find(key, ctx.seq)) |v| v != 0 else (initial == .maximized);
-        const open = try ctx.treeStateBase(ttype, null, title, &collapse);
+        const open = try ctx.treeStateBase(ttype, null, title, &collapse, null);
         try win.state.set(ctx.allocator, key, @intFromBool(collapse), ctx.seq);
         return open;
+    }
+
+    /// Like `treePush` but the header label is a selectable toggling `selected`
+    /// (`nk_tree_element_push`). Pair with `treeElementPop`.
+    pub fn treeElementPush(ctx: *Context, ttype: TreeType, title: []const u8, initial: CollapseState, selected: *bool, seed: u32) !bool {
+        const win = ctx.current.?;
+        const key = std.hash.Murmur3_32.hashWithSeed(title, seed);
+        var collapse = if (win.state.find(key, ctx.seq)) |v| v != 0 else (initial == .maximized);
+        const open = try ctx.treeStateBase(ttype, null, title, &collapse, selected);
+        try win.state.set(ctx.allocator, key, @intFromBool(collapse), ctx.seq);
+        return open;
+    }
+
+    /// Close a tree element opened with `treeElementPush` (`nk_tree_element_pop`).
+    pub fn treeElementPop(ctx: *Context) void {
+        ctx.treePop();
     }
 
     /// Close a tree node opened with `treePush` (`nk_tree_pop`).

@@ -13,6 +13,7 @@ const font_mod = @import("font.zig");
 const widget = @import("widget.zig");
 const button = @import("button.zig");
 const text_widget = @import("text.zig");
+const symbol_mod = @import("symbol.zig");
 
 const Rect = math.Rect;
 const Color = color.Color;
@@ -23,7 +24,7 @@ const Input = input_mod.Input;
 const UserFont = font_mod.UserFont;
 const States = widget.States;
 
-fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelectable, active: bool, bounds: Rect, string: []const u8, alignment: Align, font: *const UserFont) !void {
+fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelectable, active: bool, bounds: Rect, icon: ?Rect, sym: style_mod.Symbol, string: []const u8, alignment: Align, font: *const UserFont) !void {
     const bg = if (!active)
         (if (state.actived) style.pressed else if (state.hover) style.hover else style.normal)
     else
@@ -44,6 +45,7 @@ fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelecta
             try out.fillRect(bounds, style.rounding, col);
         },
     }
+    if (icon) |ic| try symbol_mod.drawSymbol(out, sym, ic, text_bg, fg, 1, font);
     try text_widget.widgetText(out, bounds, string, alignment, style.padding, text_bg, fg, font);
 }
 
@@ -60,7 +62,35 @@ pub fn doSelectable(state: *States, out: *CommandBuffer, bounds: Rect, str: []co
     if (button.behavior(state, touch, in, .default)) value.* = !value.*;
 
     if (style.draw_begin) |cb| cb(out, style.userdata);
-    try drawSelectable(out, state.*, style, value.*, bounds, str, alignment, font);
+    try drawSelectable(out, state.*, style, value.*, bounds, null, .none, str, alignment, font);
+    if (style.draw_end) |cb| cb(out, style.userdata);
+    return old != value.*;
+}
+
+/// Like `doSelectable` but draws a symbol icon next to the label
+/// (`nk_do_selectable` symbol variant). The icon sits opposite the text
+/// alignment.
+pub fn doSelectableSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym: style_mod.Symbol, str: []const u8, alignment: Align, value: *bool, style: *const StyleSelectable, in: ?*const Input, font: *const UserFont) !bool {
+    const old = value.*;
+    const touch: Rect = .{
+        .x = bounds.x - style.touch_padding.x,
+        .y = bounds.y - style.touch_padding.y,
+        .w = bounds.w + style.touch_padding.x * 2,
+        .h = bounds.h + style.touch_padding.y * 2,
+    };
+    if (button.behavior(state, touch, in, .default)) value.* = !value.*;
+
+    var icon: Rect = .{
+        .y = bounds.y + style.padding.y,
+        .w = bounds.h - 2 * style.padding.y,
+        .h = bounds.h - 2 * style.padding.y,
+    };
+    if (alignment.left) {
+        icon.x = @max((bounds.x + bounds.w) - (2 * style.padding.x + icon.w), 0);
+    } else icon.x = bounds.x + 2 * style.padding.x;
+
+    if (style.draw_begin) |cb| cb(out, style.userdata);
+    try drawSelectable(out, state.*, style, value.*, bounds, icon, sym, str, alignment, font);
     if (style.draw_end) |cb| cb(out, style.userdata);
     return old != value.*;
 }

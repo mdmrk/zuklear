@@ -74,6 +74,7 @@ pub const CollapseState = context.CollapseState;
 pub const TreeType = context.TreeType;
 pub const EditFlags = context.EditFlags;
 pub const EditEvents = context.EditEvents;
+pub const filters = context.filters;
 pub const ChartType = context.ChartType;
 pub const ColorFormat = color_picker.ColorFormat;
 pub const TextEdit = text_editor.TextEdit;
