@@ -1,14 +1,13 @@
-//! The same zuklear demo as `main.zig`, but rendered with OpenGL: each frame's
-//! command buffers are converted to a vertex draw list (`render.vertex`) and
-//! drawn by the fixed-function GL renderer in `gl.zig`. Run with
-//! `zig build run-example-gl`.
+//! A software-rendered zuklear demo using wio for the window, input and
+//! framebuffer. Run with `zig build example`.
 
 const std = @import("std");
 const wio = @import("wio");
 const zk = @import("zuklear");
 const zkfont = @import("zuklear_font");
-const glr = @import("gl.zig");
+const software = zk.render.software;
 
+/// Map a wio button to either a zuklear mouse button or a logical key.
 const Mapped = union(enum) { mouse: zk.Button, key: zk.Key, none };
 
 fn mapButton(b: wio.Button) Mapped {
@@ -43,33 +42,25 @@ pub fn main(init: std.process.Init) !void {
 
     var window = try wio.Window.create(.{
         .event_fn_data = &events,
-        .title = "zuklear demo (OpenGL)",
+        .title = "zuklear demo",
         .size = .{ .width = 480, .height = 520 },
-        .gl_options = .{},
     });
     defer window.destroy();
     window.enableTextInput(.{});
 
-    const gl_ctx = try window.glCreateContext(.{ .options = .{} });
-    defer gl_ctx.destroy();
-    window.glMakeContextCurrent(gl_ctx);
-    window.glSwapInterval(1);
+    var width: usize = 480;
+    var height: usize = 520;
+    var fb = try window.createFramebuffer(.{ .width = @intCast(width), .height = @intCast(height) });
+    defer fb.destroy();
+    var pixels = try gpa.alloc(u32, width * height);
+    defer gpa.free(pixels);
 
-    var renderer = glr.Renderer.init(&wio.glGetProcAddress);
-
-    var atlas = try zkfont.bake(gpa, @embedFile("font.ttf"), 18, 512, 512);
+    // bake a real TTF; fall back to the built-in bitmap font on failure
+    var atlas = try zkfont.bake(gpa, @import("assets").ttf, 18, 512, 512);
     defer atlas.deinit();
-    try renderer.uploadFont(gpa, &atlas);
     const font = atlas.userFont();
-
     var ctx = zk.Context.init(gpa, &font);
     defer ctx.deinit();
-
-    var draw_list = zk.render.vertex.DrawList.init(gpa);
-    defer draw_list.deinit();
-
-    var fb_w: i32 = 480;
-    var fb_h: i32 = 520;
 
     // demo state
     var clicks: u32 = 0;
@@ -91,8 +82,11 @@ pub fn main(init: std.process.Init) !void {
         while (events.pop()) |event| switch (event) {
             .close => closed = true,
             .size_physical => |sz| {
-                fb_w = sz.width;
-                fb_h = sz.height;
+                width = sz.width;
+                height = sz.height;
+                fb.destroy();
+                fb = try window.createFramebuffer(.{ .width = sz.width, .height = sz.height });
+                pixels = try gpa.realloc(pixels, width * height);
             },
             .mouse => |p| {
                 mouse_x = p.x;
@@ -124,7 +118,7 @@ pub fn main(init: std.process.Init) !void {
             .scalable = true,
         })) {
             ctx.layoutRowDynamic(0, 1);
-            try ctx.label("Rendered with OpenGL", .{ .left = true, .middle = true });
+            try ctx.label("Hello from zuklear!", .{ .left = true, .middle = true });
 
             ctx.layoutRowDynamic(30, 1);
             if (try ctx.buttonLabel("Click me")) clicks += 1;
@@ -153,17 +147,18 @@ pub fn main(init: std.process.Init) !void {
         }
         ctx.end();
 
-        // --- convert + draw ----------------------------------------------
-        draw_list.reset();
-        const cfg = zk.render.vertex.ConvertConfig{
-            .white_uv = atlas.whiteUv(),
-            .text_hook = &zkfont.drawListText,
-        };
-        for (ctx.windows.items) |w| try draw_list.convert(w.buffer.items(), cfg);
-
-        renderer.clear(fb_w, fb_h, zk.Color.rgb(28, 28, 28));
-        renderer.render(&draw_list, fb_w, fb_h);
-        window.glSwapBuffers();
+        // --- render -------------------------------------------------------
+        var surface = software.Surface{ .pixels = pixels, .width = width, .height = height };
+        surface.clear(zk.Color.rgb(28, 28, 28));
+        for (ctx.windows.items) |w| {
+            var ras = software.Rasterizer.init(&surface);
+            ras.text_fn = &zkfont.renderText; // render the baked TTF glyphs
+            ras.renderAll(w.buffer.items());
+        }
+        for (0..height) |y| {
+            for (0..width) |x| fb.setPixel(x, y, pixels[y * width + x]);
+        }
+        window.presentFramebuffer(&fb);
 
         ctx.clear();
     }

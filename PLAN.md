@@ -142,9 +142,9 @@ the user-font interface so apps can supply their own font.
 `render/vertex.zig` triangulates the `Command` list into interleaved vertices
 (pos/uv/rgba) + u32 indices + per-clip draw batches (the `nk_convert`
 equivalent); solids sample a white texel so one textured shader covers shapes
-and text. `examples/wio/gl.zig` is a fixed-function OpenGL 1.1 renderer (loads
-GL via wio, uploads the atlas as an RGBA texture, draws with `glScissor`), and
-`examples/wio/gl_main.zig` is the GL demo (`zig build run-example-gl`).
+and text. `examples/wio_opengl/gl.zig` is a fixed-function OpenGL 1.1 renderer
+(loads GL via wio, uploads the atlas as an RGBA texture, draws with `glScissor`),
+and `examples/wio_opengl/main.zig` is the GL demo (`zig build run-example-gl`).
 `zuklear_font.drawListText` provides the text geometry. A modern GLSL/Vulkan
 backend would reuse `render/vertex.zig` unchanged. Both renderers now handle
 arcs, curves and images; only the renderer-defined `custom` callback is left for
@@ -154,7 +154,7 @@ the app to dispatch.
 `render/software.zig` rasterizes the `Command` list to an RGB pixel surface
 (scissor, rects, lines, triangles, circles, gradients, polygons, text, alpha
 blend). `font/builtin.zig` provides an 8x8 bitmap `UserFont` so text renders
-without baking. `examples/wio/main.zig` is the working demo: wio window +
+without baking. `examples/wio_software/main.zig` is the working demo: wio window +
 input + framebuffer driving a full UI (`zig build example` / `run-example`).
 Curves/arcs/images in the rasterizer and a GL backend are TODO.
 
