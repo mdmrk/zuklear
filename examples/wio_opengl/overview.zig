@@ -188,10 +188,10 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
         if (try ctx.treePush(.tab, "Layout", .minimized, 4)) {
             try layoutWidget(ctx);
             try layoutGroup(ctx, st);
+            try layoutTree(ctx, st);
             try layoutNotebook(ctx, st);
             try layoutSimple(ctx, st);
             try layoutComplex(ctx, st);
-            try layoutTree(ctx, st);
             try layoutSplitter(ctx, st);
             ctx.treePop();
         }
@@ -588,6 +588,36 @@ fn chart(ctx: *zk.Context, st: *State) !void {
             ctx.layoutRowDynamic(20, 1);
             try ctx.label(try std.fmt.bufPrint(&buf, "Selected value: {d:.2}", .{@abs(@sin(step * @as(f32, @floatFromInt(st.chart_col_index))))}), .text_left);
         }
+
+        // mixed chart (column + 2 line slots)
+        ctx.layoutRowDynamic(100, 1);
+        if (try ctx.chartBegin(.column, 32, 0.0, 1.0)) {
+            ctx.chartAddSlot(.lines, 32, -1.0, 1.0);
+            ctx.chartAddSlot(.lines, 32, -1.0, 1.0);
+            id = 0;
+            for (0..32) |_| {
+                _ = ctx.chartPushSlot(@abs(@sin(id)), 0);
+                _ = ctx.chartPushSlot(@cos(id), 1);
+                _ = ctx.chartPushSlot(@sin(id), 2);
+                id += step;
+            }
+        }
+        ctx.chartEnd();
+
+        // mixed colored chart
+        ctx.layoutRowDynamic(100, 1);
+        if (try ctx.chartBeginColored(.lines, Color.rgb(255, 0, 0), Color.rgb(150, 0, 0), 32, 0.0, 1.0)) {
+            ctx.chartAddSlotColored(.lines, Color.rgb(0, 0, 255), Color.rgb(0, 0, 150), 32, -1.0, 1.0);
+            ctx.chartAddSlotColored(.lines, Color.rgb(0, 255, 0), Color.rgb(0, 150, 0), 32, -1.0, 1.0);
+            id = 0;
+            for (0..32) |_| {
+                _ = ctx.chartPushSlot(@abs(@sin(id)), 0);
+                _ = ctx.chartPushSlot(@cos(id), 1);
+                _ = ctx.chartPushSlot(@sin(id), 2);
+                id += step;
+            }
+        }
+        ctx.chartEnd();
         ctx.treePop();
     }
 }
