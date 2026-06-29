@@ -11,7 +11,16 @@ const overview = @import("overview");
 const PIXEL_HEIGHT = 13;
 const WIN_W = 480;
 const WIN_H = 600;
-const FRAMES = 1;
+
+// Scripted input shared with dump_nk.c (see the note there): expand the Window,
+// Widgets, Layout and Input tabs bottom-up, press/release per click.
+const script = [_][3]i32{
+    .{ 200, 209, 1 }, .{ 200, 209, 0 }, // Input
+    .{ 200, 184, 1 }, .{ 200, 184, 0 }, // Layout
+    .{ 200, 109, 1 }, .{ 200, 109, 0 }, // Widgets
+    .{ 200, 84, 1 }, .{ 200, 84, 0 }, // Window
+    .{ 5, 5, 0 }, // settle
+};
 
 fn fontWidth(_: zk.Handle, _: f32, text: []const u8) f32 {
     return @floatFromInt(text.len * 7); // Nuklear default font: fixed 7px advance
@@ -146,10 +155,10 @@ pub fn main() !void {
 
     var st: overview.State = .{};
 
-    var frame: usize = 0;
-    while (frame < FRAMES) : (frame += 1) {
+    for (script, 0..) |s, frame| {
         ctx.input.begin();
-        // scripted input goes here (none yet: initial collapsed state)
+        ctx.input.motion(s[0], s[1]);
+        ctx.input.button(.left, s[0], s[1], s[2] != 0);
         ctx.input.end();
 
         try overview.overview(&ctx, &st);

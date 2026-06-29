@@ -27,7 +27,20 @@
 #define PIXEL_HEIGHT 13.0f
 #define WIN_W 480
 #define WIN_H 600
-#define FRAMES 1
+
+/* Scripted input shared with dump_zk.zig: expand the Window, Widgets, Layout and
+ * Input tabs bottom-up (so each header stays at its frame-0 Y), press/release per
+ * click. Chart and Popup are left collapsed on purpose: Chart's data uses libm
+ * cos/sin (differs from std.math at the last ULP, not a port issue) and Popup has
+ * tooltip variants not yet ported. */
+static const int script[][3] = {
+    {200, 209, 1}, {200, 209, 0}, /* Input  */
+    {200, 184, 1}, {200, 184, 0}, /* Layout */
+    {200, 109, 1}, {200, 109, 0}, /* Widgets */
+    {200, 84, 1},  {200, 84, 0},  /* Window */
+    {5, 5, 0},                    /* settle, mouse in corner */
+};
+#define FRAMES ((int)(sizeof(script) / sizeof(script[0])))
 
 static int ri(float v) { return (int)nearbyintf(v); }
 static void col(struct nk_color c) { printf("%02x%02x%02x%02x", c.r, c.g, c.b, c.a); }
@@ -164,7 +177,8 @@ int main(int argc, char **argv) {
 
     for (int frame = 0; frame < FRAMES; ++frame) {
         nk_input_begin(&ctx);
-        /* scripted input goes here (none yet: initial collapsed state) */
+        nk_input_motion(&ctx, script[frame][0], script[frame][1]);
+        nk_input_button(&ctx, NK_BUTTON_LEFT, script[frame][0], script[frame][1], script[frame][2]);
         nk_input_end(&ctx);
 
         overview(&ctx);
