@@ -72,6 +72,13 @@ pub const State = struct {
     chart_col_index: i32 = -1,
     chart_line_index: i32 = -1,
 
+    // Popup tab
+    pp_color: Color = .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+    pp_select: [4]bool = [_]bool{false} ** 4,
+    pp_popup_active: bool = false,
+    pp_ctx_prog: usize = 40,
+    pp_ctx_slider: i32 = 10,
+
     // Layout > Group
     group_titlebar: bool = false,
     group_border: bool = true,
@@ -96,7 +103,16 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
 
     if (try ctx.begin("Overview", .init(10, 10, 400, 600), flags)) {
         if (st.show_menu) try menubar(ctx, st);
-        // TODO: About popup (needs blocking popup); `show_app_about` is tracked.
+
+        if (st.show_app_about) {
+            if (try ctx.popupBegin(.static, "About", .{ .closable = true }, .init(20, 100, 300, 190))) {
+                ctx.layoutRowDynamic(20, 1);
+                try ctx.label("Nuklear", .text_left);
+                try ctx.label("By Micha Mettke", .text_left);
+                try ctx.label("nuklear is licensed under the public domain License.", .text_left);
+                ctx.popupEnd();
+            } else st.show_app_about = false;
+        }
 
         // --- Window flags ------------------------------------------------
         if (try ctx.treePush(.tab, "Window", .minimized, 1)) {
@@ -129,7 +145,8 @@ pub fn overview(ctx: *zk.Context, st: *State) !void {
         // --- Chart -------------------------------------------------------
         try chart(ctx, st);
 
-        // TODO: Popup tab (needs contextual/popup/tooltip)
+        // --- Popup -------------------------------------------------------
+        try popupTab(ctx, st);
 
         // --- Layout ------------------------------------------------------
         if (try ctx.treePush(.tab, "Layout", .minimized, 4)) {
@@ -356,15 +373,18 @@ fn chart(ctx: *zk.Context, st: *State) !void {
         // line chart
         ctx.layoutRowDynamic(100, 1);
         var id: f32 = 0;
+        var hover: i32 = -1;
         if (try ctx.chartBegin(.lines, 32, -1.0, 1.0)) {
             for (0..32) |i| {
                 const res = ctx.chartPush(@cos(id));
+                if (res.hovering) hover = @intCast(i);
                 if (res.clicked) st.chart_line_index = @intCast(i);
                 id += step;
             }
             ctx.chartEnd();
         }
-        // TODO: hover tooltip (needs tooltip subsystem)
+        if (hover != -1)
+            try ctx.tooltip(try std.fmt.bufPrint(&buf, "Value: {d:.2}", .{@cos(@as(f32, @floatFromInt(hover)) * step)}));
         if (st.chart_line_index != -1) {
             ctx.layoutRowDynamic(20, 1);
             try ctx.label(try std.fmt.bufPrint(&buf, "Selected value: {d:.2}", .{@cos(@as(f32, @floatFromInt(st.chart_line_index)) * step)}), .text_left);
@@ -372,19 +392,93 @@ fn chart(ctx: *zk.Context, st: *State) !void {
 
         // column chart
         ctx.layoutRowDynamic(100, 1);
+        hover = -1;
         if (try ctx.chartBegin(.column, 32, 0.0, 1.0)) {
             id = 0;
             for (0..32) |i| {
                 const res = ctx.chartPush(@abs(@sin(id)));
+                if (res.hovering) hover = @intCast(i);
                 if (res.clicked) st.chart_col_index = @intCast(i);
                 id += step;
             }
             ctx.chartEnd();
         }
+        if (hover != -1)
+            try ctx.tooltip(try std.fmt.bufPrint(&buf, "Value: {d:.2}", .{@abs(@sin(step * @as(f32, @floatFromInt(hover))))}));
         if (st.chart_col_index != -1) {
             ctx.layoutRowDynamic(20, 1);
             try ctx.label(try std.fmt.bufPrint(&buf, "Selected value: {d:.2}", .{@abs(@sin(step * @as(f32, @floatFromInt(st.chart_col_index))))}), .text_left);
         }
+        ctx.treePop();
+    }
+}
+
+fn popupTab(ctx: *zk.Context, st: *State) !void {
+    if (try ctx.treePush(.tab, "Popup", .minimized, 6)) {
+        // menu contextual (right-click the label)
+        ctx.layoutRowStatic(30, 160, 1);
+        var bounds = ctx.widgetBounds();
+        try ctx.label("Right click me for menu", .text_left);
+        if (try ctx.contextualBegin(.{}, .init(100, 300), bounds)) {
+            ctx.layoutRowDynamic(25, 1);
+            _ = try ctx.checkboxLabel("Menu", &st.show_menu);
+            _ = try ctx.progress(&st.pp_ctx_prog, 100, true);
+            _ = try ctx.sliderInt(0, &st.pp_ctx_slider, 16, 1);
+            if (try ctx.contextualItemLabel("About", .text_centered)) st.show_app_about = true;
+            inline for (0..4) |i| {
+                _ = try ctx.selectableLabel(if (st.pp_select[i]) "Unselect" else "Select", .text_left, &st.pp_select[i]);
+            }
+            ctx.contextualEnd();
+        }
+
+        // color contextual (right-click the swatch)
+        ctx.layoutRowBegin(.static, 30, 2);
+        ctx.layoutRowPush(120);
+        try ctx.label("Right Click here:", .text_left);
+        ctx.layoutRowPush(50);
+        bounds = ctx.widgetBounds();
+        _ = try ctx.buttonColor(st.pp_color);
+        ctx.layoutRowEnd();
+        if (try ctx.contextualBegin(.{}, .init(350, 60), bounds)) {
+            ctx.layoutRowDynamic(30, 4);
+            st.pp_color.r = @intCast(try ctx.propertyi("#r", 0, st.pp_color.r, 255, 1, 1));
+            st.pp_color.g = @intCast(try ctx.propertyi("#g", 0, st.pp_color.g, 255, 1, 1));
+            st.pp_color.b = @intCast(try ctx.propertyi("#b", 0, st.pp_color.b, 255, 1, 1));
+            st.pp_color.a = @intCast(try ctx.propertyi("#a", 0, st.pp_color.a, 255, 1, 1));
+            ctx.contextualEnd();
+        }
+
+        // blocking popup
+        ctx.layoutRowBegin(.static, 30, 2);
+        ctx.layoutRowPush(120);
+        try ctx.label("Popup:", .text_left);
+        ctx.layoutRowPush(50);
+        if (try ctx.buttonLabel("Popup")) st.pp_popup_active = true;
+        ctx.layoutRowEnd();
+        if (st.pp_popup_active) {
+            if (try ctx.popupBegin(.static, "Error", .{}, .init(20, 100, 220, 90))) {
+                ctx.layoutRowDynamic(25, 1);
+                try ctx.label("A terrible error as occurred", .text_left);
+                ctx.layoutRowDynamic(25, 2);
+                if (try ctx.buttonLabel("OK")) {
+                    st.pp_popup_active = false;
+                    ctx.popupClose();
+                }
+                if (try ctx.buttonLabel("Cancel")) {
+                    st.pp_popup_active = false;
+                    ctx.popupClose();
+                }
+                ctx.popupEnd();
+            } else st.pp_popup_active = false;
+        }
+
+        // default tooltip on hover
+        ctx.layoutRowStatic(30, 400, 1);
+        bounds = ctx.widgetBounds();
+        try ctx.label("Hover for default tooltip", .text_left);
+        if (ctx.input.isMouseHoveringRect(bounds)) try ctx.tooltip("This is a default tooltip");
+        // TODO: delayed/offset/Gnome/MAGIC tooltips + custom-tooltip editor
+
         ctx.treePop();
     }
 }
