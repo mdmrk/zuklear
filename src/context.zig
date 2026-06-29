@@ -286,6 +286,9 @@ pub const Panel = struct {
     /// For a group panel: the parent-window `WidgetState` key its scroll offset
     /// is loaded from / stored to across frames (0 = none).
     scroll_key: u32 = 0,
+    /// Reserved menubar strip; only meaningful between `menubarBegin`/`End`
+    /// (`nk_panel.menu`).
+    menu: struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0, offset: Scroll = .{} } = .{},
 };
 
 /// Non-blocking popup state held on the parent window (`nk_popup_state`).
@@ -319,6 +322,12 @@ pub const Window = struct {
 /// Hash seed Nuklear uses for window names (`NK_WINDOW_TITLE`).
 const window_title_seed: u32 = 0x77696e64; // 'wind'
 
+/// A saved `*Vec2`/`*f32` style field for the `stylePush*`/`stylePop*` stacks
+/// (`nk_config_stack_*`).
+const StyleVec2Entry = struct { addr: *Vec2, old: Vec2 };
+const StyleFloatEntry = struct { addr: *f32, old: f32 };
+const style_stack_size = 16;
+
 pub const Context = struct {
     allocator: std.mem.Allocator,
     input: Input = .{},
@@ -337,6 +346,12 @@ pub const Context = struct {
     /// The property currently being click-edited (0 = none) and its editor.
     prop_active: u32 = 0,
     prop_edit: ?text_editor.TextEdit = null,
+
+    /// Bounded config-stacks backing `stylePush*`/`stylePop*` (`nk_config_stack`).
+    style_vec2: [style_stack_size]StyleVec2Entry = undefined,
+    style_vec2_len: usize = 0,
+    style_float: [style_stack_size]StyleFloatEntry = undefined,
+    style_float_len: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, font: ?*const UserFont) Context {
         var s: Style = .default();
@@ -1876,6 +1891,73 @@ pub const Context = struct {
             try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = line_h }, str[start..], .{ .left = true, .top = true }, .init(0, 0), bg, fg, font);
     }
 
+    // --- style config stack -----------------------------------------------
+
+    /// Override a `Vec2` style field, saving the old value for `stylePopVec2`
+    /// (`nk_style_push_vec2`).
+    pub fn stylePushVec2(ctx: *Context, addr: *Vec2, value: Vec2) void {
+        ctx.style_vec2[ctx.style_vec2_len] = .{ .addr = addr, .old = addr.* };
+        ctx.style_vec2_len += 1;
+        addr.* = value;
+    }
+
+    /// Restore the most recently pushed `Vec2` style field (`nk_style_pop_vec2`).
+    pub fn stylePopVec2(ctx: *Context) void {
+        ctx.style_vec2_len -= 1;
+        const e = ctx.style_vec2[ctx.style_vec2_len];
+        e.addr.* = e.old;
+    }
+
+    /// Override an `f32` style field, saving the old value for `stylePopFloat`
+    /// (`nk_style_push_float`).
+    pub fn stylePushFloat(ctx: *Context, addr: *f32, value: f32) void {
+        ctx.style_float[ctx.style_float_len] = .{ .addr = addr, .old = addr.* };
+        ctx.style_float_len += 1;
+        addr.* = value;
+    }
+
+    /// Restore the most recently pushed `f32` style field (`nk_style_pop_float`).
+    pub fn stylePopFloat(ctx: *Context) void {
+        ctx.style_float_len -= 1;
+        const e = ctx.style_float[ctx.style_float_len];
+        e.addr.* = e.old;
+    }
+
+    // --- menubar ----------------------------------------------------------
+
+    /// Reserve a non-scrolling strip at the top of the window for a menu row.
+    /// Must be the first call after `begin`; pair with `menubarEnd`
+    /// (`nk_menubar_begin`).
+    pub fn menubarBegin(ctx: *Context) void {
+        const layout = ctx.current.?.layout.?;
+        if (layout.flags.hidden or layout.flags.minimized) return;
+        layout.menu.x = layout.at_x;
+        layout.menu.y = layout.at_y + layout.row.height;
+        layout.menu.w = layout.bounds.w;
+        layout.menu.offset.x = layout.offset_x.*;
+        layout.menu.offset.y = layout.offset_y.*;
+        layout.offset_y.* = 0;
+    }
+
+    /// Close the menubar strip; content below it scrolls normally
+    /// (`nk_menubar_end`).
+    pub fn menubarEnd(ctx: *Context) void {
+        const win = ctx.current.?;
+        const layout = win.layout.?;
+        if (layout.flags.hidden or layout.flags.minimized) return;
+        const out = layout.buffer;
+        layout.menu.h = layout.at_y - layout.menu.y;
+        layout.menu.h += layout.row.height + ctx.style.window.spacing.y;
+        layout.bounds.y += layout.menu.h;
+        layout.bounds.h -= layout.menu.h;
+        layout.offset_x.* = layout.menu.offset.x;
+        layout.offset_y.* = layout.menu.offset.y;
+        layout.at_y = layout.bounds.y - layout.row.height;
+        layout.clip.y = layout.bounds.y;
+        layout.clip.h = layout.bounds.h;
+        out.pushScissor(layout.clip) catch {};
+    }
+
     // --- chart ------------------------------------------------------------
 
     /// Begin a chart with an explicit slot color (`nk_chart_begin_colored`).
@@ -2885,4 +2967,38 @@ test "PanelType set membership" {
     try std.testing.expect(!PanelType.window.isNonblock());
     try std.testing.expect(PanelType.group.isSub());
     try std.testing.expect(!PanelType.window.isSub());
+}
+
+test "style config stack pushes and pops values" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    const orig_spacing = ctx.style.window.spacing;
+    const orig_round = ctx.style.button.rounding;
+
+    ctx.stylePushVec2(&ctx.style.window.spacing, .init(0, 0));
+    ctx.stylePushFloat(&ctx.style.button.rounding, 0);
+    try std.testing.expectEqual(Vec2.init(0, 0), ctx.style.window.spacing);
+    try std.testing.expectEqual(@as(f32, 0), ctx.style.button.rounding);
+
+    ctx.stylePopFloat();
+    ctx.stylePopVec2();
+    try std.testing.expectEqual(orig_spacing, ctx.style.window.spacing);
+    try std.testing.expectEqual(orig_round, ctx.style.button.rounding);
+}
+
+test "menubar reserves a top strip and shifts content down" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    ctx.input.mouse.pos = .{ .x = 20, .y = 50 };
+
+    _ = try ctx.begin("mb", .init(0, 0, 200, 200), .{ .border = true, .title = true });
+    const top = ctx.current.?.layout.?.bounds.y;
+    ctx.menubarBegin();
+    ctx.layoutRowStatic(25, 45, 1);
+    _ = try ctx.buttonLabel("MENU");
+    ctx.menubarEnd();
+    // content now starts below the reserved menu strip
+    try std.testing.expect(ctx.current.?.layout.?.bounds.y > top);
+    ctx.end();
 }
