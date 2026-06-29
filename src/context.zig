@@ -1093,7 +1093,7 @@ pub const Context = struct {
         const win = ctx.current.?;
         const layout = win.layout.?;
         const s = &ctx.style;
-        const spacing = s.window.spacing;
+        const win_spacing = s.window.spacing;
         const panel_space = usableSpace(s, layout.bounds.w, layout.row.columns);
         const off_x: f32 = @floatFromInt(layout.offset_x.*);
         const off_y: f32 = @floatFromInt(layout.offset_y.*);
@@ -1109,7 +1109,7 @@ pub const Context = struct {
                 const w = @max(1.0, panel_space) / @as(f32, @floatFromInt(layout.row.columns));
                 item_offset = idx * w;
                 item_width = w + frac(item_offset);
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
             },
             .dynamic_row => {
                 const w = layout.row.item_width * panel_space;
@@ -1117,7 +1117,7 @@ pub const Context = struct {
                 item_width = w + frac(item_offset);
                 item_spacing = 0;
                 if (modify) {
-                    layout.row.item_offset += w + spacing.x;
+                    layout.row.item_offset += w + win_spacing.x;
                     layout.row.filled += layout.row.item_width;
                     layout.row.index = 0;
                 }
@@ -1133,7 +1133,7 @@ pub const Context = struct {
                 const r = layout.row.ratio.?;
                 const ratio = if (r[@intCast(layout.row.index)] < 0) layout.row.item_width else r[@intCast(layout.row.index)];
                 const w = ratio * panel_space;
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
                 item_offset = layout.row.item_offset;
                 item_width = w + frac(item_offset);
                 if (modify) {
@@ -1144,12 +1144,12 @@ pub const Context = struct {
             .static_fixed => {
                 item_width = layout.row.item_width;
                 item_offset = idx * item_width;
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
             },
             .static_row => {
                 item_width = layout.row.item_width;
                 item_offset = layout.row.item_offset;
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
                 if (modify) layout.row.item_offset += item_width;
             },
             .static_free => {
@@ -1162,7 +1162,7 @@ pub const Context = struct {
                 return bounds;
             },
             .static => {
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
                 item_width = layout.row.ratio.?[@intCast(layout.row.index)];
                 item_offset = layout.row.item_offset;
                 if (modify) layout.row.item_offset += item_width;
@@ -1171,13 +1171,13 @@ pub const Context = struct {
                 const w = layout.row.templates[@intCast(layout.row.index)];
                 item_offset = layout.row.item_offset;
                 item_width = w + frac(item_offset);
-                item_spacing = idx * spacing.x;
+                item_spacing = idx * win_spacing.x;
                 if (modify) layout.row.item_offset += w;
             },
         }
 
         bounds.w = item_width;
-        bounds.h = layout.row.height - spacing.y;
+        bounds.h = layout.row.height - win_spacing.y;
         bounds.y = layout.at_y - off_y;
         bounds.x = layout.at_x + item_offset + item_spacing;
         if (bounds.x + bounds.w > layout.max_x and modify) layout.max_x = bounds.x + bounds.w;
@@ -1894,6 +1894,33 @@ pub const Context = struct {
         layout.at_y = y;
         layout.row.index = index;
         return bounds;
+    }
+
+    /// Draw a horizontal divider in the next layout slot (`nk_rule_horizontal`).
+    pub fn ruleHorizontal(ctx: *Context, col: Color, rounding: bool) !void {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return;
+        const r: f32 = if (rounding and w.bounds.h > 1.5) w.bounds.h / 2.0 else 0;
+        try win.layout.?.buffer.fillRect(w.bounds, r, col);
+    }
+
+    /// Skip `cols` widget slots (advancing rows as needed) (`nk_spacing`).
+    pub fn spacing(ctx: *Context, cols: i32) void {
+        const layout = ctx.current.?.layout.?;
+        var c = cols;
+        const index = @mod(layout.row.index + c, layout.row.columns);
+        const rows = @divFloor(layout.row.index + c, layout.row.columns);
+        if (rows != 0) {
+            var i: i32 = 0;
+            while (i < rows) : (i += 1) ctx.panelAllocRow();
+            c = index;
+        }
+        if (layout.row.type != .dynamic_fixed and layout.row.type != .static_fixed) {
+            var i: i32 = 0;
+            while (i < c) : (i += 1) _ = ctx.panelAllocSpace();
+        }
+        layout.row.index = index;
     }
 
     /// Draw greedily word-wrapped text in the next layout slot (`nk_label_wrap`).
@@ -2644,6 +2671,79 @@ pub const Context = struct {
     /// Close an open combo box (`nk_combo_end`).
     pub fn comboEnd(ctx: *Context) void {
         ctx.contextualEnd();
+    }
+
+    /// Close the open combo from inside its popup (`nk_combo_close`).
+    pub fn comboClose(ctx: *Context) void {
+        ctx.popupClose();
+    }
+
+    /// A dropdown whose header is a color swatch; `size` is the body size.
+    /// Returns true when open (`nk_combo_begin_color`).
+    pub fn comboBeginColor(ctx: *Context, col: Color, size: Vec2) !bool {
+        const win = ctx.current.?;
+        const s = &ctx.style;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        const header = w.bounds;
+        const in = if (win.layout.?.flags.rom or w.state != .valid) null else &ctx.input;
+        const is_clicked = button_widget.behavior(&ctx.last_widget_state, header, in, .default);
+
+        const out = win.layout.?.buffer;
+        const st = ctx.last_widget_state;
+        const bg = if (st.actived) s.combo.active else if (st.hover) s.combo.hover else s.combo.normal;
+        switch (bg) {
+            .image => |img| try out.drawImage(header, img, Color.white.factor(s.combo.color_factor)),
+            .nine_slice => |sl| try out.drawNineSlice(header, sl, Color.white.factor(s.combo.color_factor)),
+            .color => |bgcol| {
+                try out.fillRect(header, s.combo.rounding, bgcol.factor(s.combo.color_factor));
+                try out.strokeRect(header, s.combo.rounding, s.combo.border, s.combo.border_color.factor(s.combo.color_factor));
+            },
+        }
+
+        // dropdown arrow button
+        const btn: Rect = .{
+            .w = header.h - 2 * s.combo.button_padding.y,
+            .x = header.x + header.w - header.h - s.combo.button_padding.x,
+            .y = header.y + s.combo.button_padding.y,
+            .h = header.h - 2 * s.combo.button_padding.y,
+        };
+        const sym = if (st.actived) s.combo.sym_active else if (st.hover) s.combo.sym_hover else s.combo.sym_normal;
+        _ = button_widget.doButtonSymbol(&ctx.last_widget_state, out, btn, sym, .default, &s.combo.button, in, s.font.?) catch false;
+
+        // color swatch
+        const swatch: Rect = .{
+            .x = header.x + 2 * s.combo.content_padding.x,
+            .y = header.y + 2 * s.combo.content_padding.y,
+            .w = btn.x - (header.x + 3 * s.combo.content_padding.x),
+            .h = header.h - 4 * s.combo.content_padding.y,
+        };
+        try out.fillRect(swatch, 0, col);
+
+        return ctx.comboBegin(win, size, is_clicked, header);
+    }
+
+    /// A simple dropdown over an array of labels; returns the new selection
+    /// (`nk_combo`).
+    pub fn combo(ctx: *Context, items: []const []const u8, selected: usize, item_height: i32, size: Vec2) !usize {
+        if (items.len == 0) return selected;
+        var sel = selected;
+        const s = &ctx.style;
+        const item_spacing = s.window.spacing;
+        const window_padding = panelGetPadding(s, ctx.current.?.layout.?.type);
+        const count: f32 = @floatFromInt(items.len);
+        const ih: f32 = @floatFromInt(item_height);
+        const max_height = count * ih + count * item_spacing.y + item_spacing.y * 2 + window_padding.y * 2;
+        var sz = size;
+        sz.y = @min(sz.y, max_height);
+        if (try ctx.comboBeginLabel(items[sel], sz)) {
+            ctx.layoutRowDynamic(ih, 1);
+            for (items, 0..) |it, i| {
+                if (try ctx.comboItemLabel(it, Align.text_left)) sel = i;
+            }
+            ctx.comboEnd();
+        }
+        return sel;
     }
 
     // --- menu -------------------------------------------------------------
