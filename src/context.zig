@@ -1505,8 +1505,8 @@ pub const Context = struct {
     /// (`nk_edit_buffer`). Returns the frame's edit events.
     ///
     /// Single-line fields scroll horizontally to keep the cursor visible;
-    /// `EditFlags.multiline` fields wrap on newlines and scroll vertically.
-    /// (Long lines are clipped rather than horizontally scrolled.)
+    /// `EditFlags.multiline` fields break on newlines and scroll both ways to
+    /// keep the cursor's line and column in view.
     pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
@@ -1665,7 +1665,7 @@ pub const Context = struct {
         if (flags.multiline) {
             const row_h = font.height + ctx.style.edit.row_padding;
             const want: i32 = @intFromFloat(@max(0, (mouse.y - area.y + editor.scroll_y) / row_h));
-            line_origin_x = area.x;
+            line_origin_x = area.x - editor.scroll_x;
             var line_no: i32 = 0;
             var start: usize = 0;
             var idx: usize = 0;
@@ -1721,6 +1721,14 @@ pub const Context = struct {
         }
         editor.scroll_y = @max(0, editor.scroll_y);
 
+        // horizontal scroll to keep the cursor column visible
+        if (editor.active) {
+            if (cursor_col_x < editor.scroll_x) editor.scroll_x = cursor_col_x;
+            if (cursor_col_x > editor.scroll_x + area.w - s.cursor_size) editor.scroll_x = cursor_col_x - area.w + s.cursor_size;
+        }
+        editor.scroll_x = @max(0, editor.scroll_x);
+        const ox = area.x - editor.scroll_x;
+
         // normalized selection byte range, if any
         const has_sel = editor.hasSelection();
         var sel_a: usize = 0;
@@ -1738,8 +1746,8 @@ pub const Context = struct {
         }
         const space_w = font.textWidth(" ");
 
-        // draw each line: selection highlight, then the text on top (long lines
-        // are clipped; no horizontal scroll here)
+        // draw each line: selection highlight, then the text on top (scrolled
+        // horizontally by `ox`; the scissor clips overflow to the field)
         var y = area.y - editor.scroll_y;
         var ls: usize = 0;
         while (true) {
@@ -1752,9 +1760,9 @@ pub const Context = struct {
                     const start_x = font.textWidth(bytes[ls..a_clamp]);
                     var end_x = font.textWidth(bytes[ls..b_clamp]);
                     if (sel_b > le) end_x += space_w; // newline selected: trailing marker
-                    try out.fillRect(.init(area.x + start_x, y, end_x - start_x, row_h), 0, s.selected_normal);
+                    try out.fillRect(.init(ox + start_x, y, end_x - start_x, row_h), 0, s.selected_normal);
                 }
-                try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = row_h }, line, .{ .left = true, .top = true }, .init(0, 0), text_bg, text_color, font);
+                try text_widget.widgetText(out, .{ .x = ox, .y = y, .w = area.w + editor.scroll_x, .h = row_h }, line, .{ .left = true, .top = true }, .init(0, 0), text_bg, text_color, font);
             }
             y += row_h;
             if (le >= bytes.len) break;
@@ -1763,7 +1771,7 @@ pub const Context = struct {
 
         if (editor.active and !flags.no_cursor and !editor.hasSelection()) {
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
-            try out.fillRect(.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
+            try out.fillRect(.init(ox + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
         }
     }
 
@@ -3369,6 +3377,23 @@ test "edit scrolls horizontally to keep the cursor visible" {
     _ = try ctx.editBuffer(EditFlags.field, &editor);
     ctx.end();
     // cursor is at the end, far past the field width, so the text scrolled
+    try std.testing.expect(editor.scroll_x > 0);
+}
+
+test "multiline edit scrolls horizontally for a long line" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
+    defer editor.deinit();
+    editor.active = true;
+    // multiline (single_line stays false): a short line then a very long one
+    try editor.insert("short\na long line of text that does not fit in the field");
+
+    _ = try ctx.begin("w", .init(0, 0, 120, 80), .{});
+    ctx.layoutRowDynamic(60, 1);
+    _ = try ctx.editBuffer(EditFlags.box, &editor);
+    ctx.end();
+    // cursor sits at the end of the long second line, so it scrolled right
     try std.testing.expect(editor.scroll_x > 0);
 }
 
