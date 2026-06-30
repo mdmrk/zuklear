@@ -1428,12 +1428,12 @@ pub const Context = struct {
 
     /// A rotary knob; updates `value`, returns whether it changed
     /// (`nk_knob_float`).
-    pub fn knobFloat(ctx: *Context, min: f32, value: *f32, max: f32, step: f32, zero_direction: math.Heading, dead_zone_percent: f32) !bool {
+    pub fn knobFloat(ctx: *Context, min: f32, value: *f32, max: f32, step: f32, zero_direction: math.Heading, dead_zone_degrees: f32) !bool {
         const win = ctx.current.?;
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = value.*;
-        value.* = try knob_widget.doKnob(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_percent, &ctx.style.knob, ctx.widgetInputMut(w.state));
+        value.* = try knob_widget.doKnob(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_degrees / 360.0, &ctx.style.knob, ctx.widgetInputMut(w.state));
         return value.* != old;
     }
 
@@ -1878,9 +1878,9 @@ pub const Context = struct {
     }
 
     /// An integer knob (`nk_knob_int`).
-    pub fn knobInt(ctx: *Context, min: i32, value: *i32, max: i32, step: i32, zero_direction: math.Heading, dead_zone_percent: f32) !bool {
+    pub fn knobInt(ctx: *Context, min: i32, value: *i32, max: i32, step: i32, zero_direction: math.Heading, dead_zone_degrees: f32) !bool {
         var f: f32 = @floatFromInt(value.*);
-        const changed = try ctx.knobFloat(@floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step), zero_direction, dead_zone_percent);
+        const changed = try ctx.knobFloat(@floatFromInt(min), &f, @floatFromInt(max), @floatFromInt(step), zero_direction, dead_zone_degrees);
         value.* = @intFromFloat(@round(f));
         return changed;
     }
