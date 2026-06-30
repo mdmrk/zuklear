@@ -170,3 +170,39 @@ test "dragging the slider cursor changes the value" {
     const v = try doSlider(&state, &buf, .init(0, 0, 200, 20), 0, 0, 10, 1, &style, &in, &test_font);
     try std.testing.expect(v > 0);
 }
+
+test "drag keeps tracking once the mouse leaves the slider bounds" {
+    const style = style_mod.Style.default().slider;
+    var buf: CommandBuffer = .init(std.testing.allocator);
+    defer buf.deinit();
+    buf.use_clipping = false;
+    const bounds: Rect = .init(0, 0, 200, 20);
+
+    var in: Input = .{};
+    var state: States = .{};
+    var v: f32 = 0;
+
+    // press on the cursor near the left edge
+    in.begin();
+    in.motion(8, 10);
+    in.button(.left, 8, 10, true);
+    in.end();
+    v = try doSlider(&state, &buf, bounds, 0, v, 100, 1, &style, &in, &test_font);
+
+    // hold and drag far past the right edge and below the rect: the value pins
+    // to max and the widget stays active even though the mouse left the bounds.
+    in.begin();
+    in.motion(400, 200);
+    in.end();
+    v = try doSlider(&state, &buf, bounds, 0, v, 100, 1, &style, &in, &test_font);
+    try std.testing.expectEqual(@as(f32, 100), v);
+    try std.testing.expect(state.actived);
+
+    // drag back left (still outside vertically): the value follows the mouse.
+    in.begin();
+    in.motion(50, 200);
+    in.end();
+    v = try doSlider(&state, &buf, bounds, 0, v, 100, 1, &style, &in, &test_font);
+    try std.testing.expect(v > 0 and v < 100);
+    try std.testing.expect(state.actived);
+}
