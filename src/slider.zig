@@ -1,7 +1,5 @@
-//! Slider widget, ported from `nuklear_slider.c`.
-//!
-//! Optional inc/dec buttons (`style.show_buttons`, off by default) are deferred;
-//! the core drag/value logic is complete.
+//! Slider widget, ported from `nuklear_slider.c`. Optional inc/dec buttons
+//! (`style.show_buttons`, off by default) flank the bar at each end.
 
 const std = @import("std");
 const math = @import("math.zig");
@@ -11,6 +9,7 @@ const command = @import("command.zig");
 const input_mod = @import("input.zig");
 const font_mod = @import("font.zig");
 const widget = @import("widget.zig");
+const button_widget = @import("button.zig");
 
 const Rect = math.Rect;
 const Color = color.Color;
@@ -93,7 +92,6 @@ fn drawSlider(out: *CommandBuffer, state: States, style: *const StyleSlider, bou
 /// Lay out, interact with and draw a slider, returning the new value
 /// (`nk_do_slider`).
 pub fn doSlider(state: *States, out: *CommandBuffer, bounds_in: Rect, min: f32, val: f32, max: f32, step: f32, style: *const StyleSlider, in: ?*Input, font: *const UserFont) !f32 {
-    _ = font;
     var bounds = bounds_in;
     bounds.x += style.padding.x;
     bounds.y += style.padding.y;
@@ -102,11 +100,24 @@ pub fn doSlider(state: *States, out: *CommandBuffer, bounds_in: Rect, min: f32, 
     bounds.w -= 2 * style.padding.x;
     bounds.h -= 2 * style.padding.y;
 
-    // NOTE: style.show_buttons (inc/dec) deferred until the symbol button widget.
+    var slider_val = val;
+
+    // optional inc/dec buttons, a square at each end (`nk_do_slider`)
+    if (style.show_buttons) {
+        var ws: States = .{};
+        var button: Rect = .{ .x = bounds.x, .y = bounds.y, .w = bounds.h, .h = bounds.h };
+        if (try button_widget.doButtonSymbol(&ws, out, button, style.dec_symbol, .default, &style.dec_button, in, font))
+            slider_val -= step;
+        button.x = (bounds.x + bounds.w) - button.w;
+        if (try button_widget.doButtonSymbol(&ws, out, button, style.inc_symbol, .default, &style.inc_button, in, font))
+            slider_val += step;
+        bounds.x = bounds.x + button.w + style.spacing.x;
+        bounds.w = bounds.w - (2 * button.w + 2 * style.spacing.x);
+    }
 
     const slider_max = @max(min, max);
     const slider_min = @min(min, max);
-    const slider_value = std.math.clamp(val, slider_min, slider_max);
+    const slider_value = std.math.clamp(slider_val, slider_min, slider_max);
     const slider_range = slider_max - slider_min;
     const slider_steps = slider_range / step;
     const cursor_offset = (slider_value - slider_min) / step;
@@ -205,4 +216,23 @@ test "drag keeps tracking once the mouse leaves the slider bounds" {
     v = try doSlider(&state, &buf, bounds, 0, v, 100, 1, &style, &in, &test_font);
     try std.testing.expect(v > 0 and v < 100);
     try std.testing.expect(state.actived);
+}
+
+test "show_buttons: clicking the increment button steps the value" {
+    var style = style_mod.Style.default().slider;
+    style.show_buttons = true;
+    var buf: CommandBuffer = .init(std.testing.allocator);
+    defer buf.deinit();
+    buf.use_clipping = false;
+
+    // bounds (0,0,200,20) with padding (2,2) -> inner bounds x=2 w=196 h=16;
+    // the inc button is a 16px square at the right end, x in [182,198] y in [2,18].
+    var in: Input = .{};
+    in.begin();
+    in.mouse.pos = .{ .x = 190, .y = 10 };
+    in.button(.left, 190, 10, true); // press on the inc button (triggers on press)
+
+    var state: States = .{};
+    const v = try doSlider(&state, &buf, .init(0, 0, 200, 20), 0, 5, 10, 1, &style, &in, &test_font);
+    try std.testing.expectEqual(@as(f32, 6), v);
 }
