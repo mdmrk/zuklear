@@ -1506,7 +1506,7 @@ pub const Context = struct {
     ///
     /// Single-line fields scroll horizontally to keep the cursor visible;
     /// `EditFlags.multiline` fields wrap on newlines and scroll vertically.
-    /// (Multi-line selection isn't highlighted; long lines are clipped.)
+    /// (Long lines are clipped rather than horizontally scrolled.)
     pub fn editBuffer(ctx: *Context, flags: EditFlags, editor: *text_editor.TextEdit) !EditEvents {
         const win = ctx.current.?;
         const s = &ctx.style.edit;
@@ -1721,16 +1721,47 @@ pub const Context = struct {
         }
         editor.scroll_y = @max(0, editor.scroll_y);
 
-        // draw each line (long lines are clipped; no horizontal scroll here)
+        // normalized selection byte range, if any
+        const has_sel = editor.hasSelection();
+        var sel_a: usize = 0;
+        var sel_b: usize = 0;
+        if (has_sel) {
+            var a = editor.select_start;
+            var b = editor.select_end;
+            if (b < a) {
+                const t = a;
+                a = b;
+                b = t;
+            }
+            sel_a = editor.string.atRune(a).?.offset;
+            sel_b = editor.string.atRune(b).?.offset;
+        }
+        const space_w = font.textWidth(" ");
+
+        // draw each line: selection highlight, then the text on top (long lines
+        // are clipped; no horizontal scroll here)
         var y = area.y - editor.scroll_y;
-        var it = std.mem.splitScalar(u8, bytes, '\n');
-        while (it.next()) |line| {
-            if (y + row_h >= area.y and y <= area.y + area.h)
+        var ls: usize = 0;
+        while (true) {
+            const le = std.mem.indexOfScalarPos(u8, bytes, ls, '\n') orelse bytes.len;
+            const line = bytes[ls..le];
+            if (y + row_h >= area.y and y <= area.y + area.h) {
+                if (has_sel and sel_a < le and sel_b > ls) {
+                    const a_clamp = std.math.clamp(sel_a, ls, le);
+                    const b_clamp = std.math.clamp(sel_b, ls, le);
+                    const start_x = font.textWidth(bytes[ls..a_clamp]);
+                    var end_x = font.textWidth(bytes[ls..b_clamp]);
+                    if (sel_b > le) end_x += space_w; // newline selected: trailing marker
+                    try out.fillRect(.init(area.x + start_x, y, end_x - start_x, row_h), 0, s.selected_normal);
+                }
                 try text_widget.widgetText(out, .{ .x = area.x, .y = y, .w = area.w, .h = row_h }, line, .{ .left = true, .top = true }, .init(0, 0), text_bg, text_color, font);
+            }
             y += row_h;
+            if (le >= bytes.len) break;
+            ls = le + 1;
         }
 
-        if (editor.active and !flags.no_cursor) {
+        if (editor.active and !flags.no_cursor and !editor.hasSelection()) {
             const cursor_color = if (wstate.actived) s.cursor_hover else s.cursor_normal;
             try out.fillRect(.init(area.x + cursor_col_x, area.y + cursor_y - editor.scroll_y, s.cursor_size, font.height), 0, cursor_color);
         }
@@ -3273,6 +3304,34 @@ test "multiline edit renders lines and a cursor" {
         texts += 1;
     };
     try std.testing.expect(texts >= 2);
+}
+
+test "multiline edit highlights the selection across lines" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var editor = try text_editor.TextEdit.init(std.testing.allocator, 128);
+    defer editor.deinit();
+    editor.active = true;
+    try editor.insert("ab\ncd");
+    editor.select_start = 1; // from 'b' on line 0
+    editor.select_end = 5; // through the end of 'cd' on line 1
+
+    ctx.input.begin();
+    _ = try ctx.begin("w", .init(0, 0, 200, 120), .{});
+    ctx.layoutRowDynamic(80, 1);
+    _ = try ctx.editBuffer(EditFlags.box, &editor);
+    ctx.end();
+
+    // a selection rect (selected_normal color) is filled on each of the two lines
+    const sel = ctx.style.edit.selected_normal;
+    var highlights: usize = 0;
+    for (ctx.windowCommands("w").?) |c| switch (c) {
+        .rect_filled => |r| if (std.meta.eql(r.color, sel)) {
+            highlights += 1;
+        },
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 2), highlights);
 }
 
 test "clicking in an edit field positions the cursor" {
