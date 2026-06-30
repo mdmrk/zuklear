@@ -144,10 +144,10 @@ Resolved since: text-editor **undo/redo**, **multi-line** editing + vertical
 motion, **click-to-position**, single-line **horizontal scroll**; **property
 click-to-type** editing; **group scrollbars** + cross-frame scroll persistence;
 renderer **arcs/curves** and **images** (software hook + vertex per-batch
-textures). Remaining (minor; reuse existing foundations): `contextual`
-(right-click) and `tooltip` (reuse `nonblockBegin`), `list_view` (group-based),
-9-slice and image/symbol selectable variants, multi-line selection highlight,
-blocking `popup`.
+textures); `contextual` (right-click) and `tooltip` (via `nonblockBegin`);
+blocking `popup`; `list_view` (virtualized over `group`); slider inc/dec buttons
+(`show_buttons`). Remaining (minor; reuse existing foundations): image and
+9-slice selectable variants, multi-line selection highlight.
 
 CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
 docs deploy; `zig build docs` emits the autodoc site.

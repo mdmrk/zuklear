@@ -350,6 +350,22 @@ pub const Window = struct {
 /// Hash seed Nuklear uses for window names (`NK_WINDOW_TITLE`).
 const window_title_seed: u32 = 0x77696e64; // 'wind'
 
+/// A virtualized list view over a scrollable group (`nk_list_view`). `begin`
+/// and `end` bound the rows visible this frame; the caller emits only those.
+pub const ListView = struct {
+    /// First visible row index.
+    begin: i32 = 0,
+    /// One past the last visible row index.
+    end: i32 = 0,
+    /// Number of visible rows (`end - begin`).
+    count: i32 = 0,
+
+    total_height: f32 = 0,
+    scroll_value: u32 = 0,
+    layout: ?*Panel = null,
+    ctx: ?*Context = null,
+};
+
 /// A saved `*Vec2`/`*f32` style field for the `stylePush*`/`stylePop*` stacks
 /// (`nk_config_stack_*`).
 const StyleVec2Entry = struct { addr: *Vec2, old: Vec2 };
@@ -2466,6 +2482,40 @@ pub const Context = struct {
         ctx.allocator.destroy(g);
     }
 
+    // --- list view --------------------------------------------------------
+
+    /// Begin a virtualized list of `row_count` rows of `row_height` px inside a
+    /// scrollable group `title` (`nk_list_view_begin`). Returns true when
+    /// visible; if so, lay out rows with `layoutRowDynamic(row_height, ...)`,
+    /// emit only indices `view.begin..view.end`, then call `listViewEnd`.
+    pub fn listViewBegin(ctx: *Context, view: *ListView, title: []const u8, flags: WindowFlags, row_height: f32, row_count: i32) !bool {
+        const spacing_y = ctx.style.window.spacing.y;
+        const rh = row_height + @max(0, spacing_y);
+
+        if (!try ctx.groupBegin(title, flags)) return false;
+        const layout = ctx.current.?.layout.?;
+
+        view.scroll_value = layout.offset_y.*;
+        layout.offset_y.* = 0; // lay rows out from the top this frame
+
+        view.total_height = rh * @as(f32, @floatFromInt(@max(row_count, 1)));
+        view.begin = @max(@as(i32, @intFromFloat(@as(f32, @floatFromInt(view.scroll_value)) / rh)), 0);
+        view.count = @max(@as(i32, @intFromFloat(@ceil(layout.clip.h / rh))), 0);
+        view.count = @min(view.count, row_count - view.begin);
+        view.end = view.begin + view.count;
+        view.layout = layout;
+        view.ctx = ctx;
+        return true;
+    }
+
+    /// Close a list view opened with `listViewBegin` (`nk_list_view_end`).
+    pub fn listViewEnd(ctx: *Context, view: *ListView) void {
+        const layout = view.layout.?;
+        layout.at_y = layout.bounds.y + view.total_height;
+        layout.offset_y.* += view.scroll_value; // restore the real scroll offset
+        ctx.groupEnd();
+    }
+
     // --- popups / combo ---------------------------------------------------
 
     fn setParentRom(layout: ?*Panel, comptime field: enum { rom, remove_rom }) void {
@@ -3147,6 +3197,52 @@ test "group lays out a nested sub-panel" {
     // back to the window's own panel
     try std.testing.expect(ctx.current.?.layout.?.parent == null);
     ctx.end();
+}
+
+test "list view shows only the visible rows of a large list" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    ctx.input.begin();
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
+    ctx.layoutRowDynamic(160, 1);
+    var lv: ListView = .{};
+    var rendered: i32 = 0;
+    try std.testing.expect(try ctx.listViewBegin(&lv, "lst", .{}, 20, 100));
+    ctx.layoutRowDynamic(20, 1);
+    var i = lv.begin;
+    while (i < lv.end) : (i += 1) {
+        try ctx.label("row", .text_left);
+        rendered += 1;
+    }
+    ctx.listViewEnd(&lv);
+    ctx.end();
+
+    try std.testing.expectEqual(@as(i32, 0), lv.begin); // unscrolled: starts at row 0
+    try std.testing.expect(lv.count > 0 and lv.count < 100); // a window of rows, not all
+    try std.testing.expectEqual(lv.begin + lv.count, lv.end);
+    try std.testing.expectEqual(lv.count, rendered); // only the visible rows emitted
+    try std.testing.expectEqual(@as(f32, 24 * 100), lv.total_height); // (row + spacing) * count
+}
+
+test "list view shows all rows when they fit" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+
+    ctx.input.begin();
+    _ = try ctx.begin("w", .init(0, 0, 200, 200), .{});
+    ctx.layoutRowDynamic(160, 1);
+    var lv: ListView = .{};
+    try std.testing.expect(try ctx.listViewBegin(&lv, "lst", .{}, 20, 3));
+    ctx.layoutRowDynamic(20, 1);
+    var i = lv.begin;
+    while (i < lv.end) : (i += 1) try ctx.label("row", .text_left);
+    ctx.listViewEnd(&lv);
+    ctx.end();
+
+    try std.testing.expectEqual(@as(i32, 0), lv.begin);
+    try std.testing.expectEqual(@as(i32, 3), lv.count); // clamped to row_count
+    try std.testing.expectEqual(@as(i32, 3), lv.end);
 }
 
 test "multiline edit renders lines and a cursor" {
