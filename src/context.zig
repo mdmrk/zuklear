@@ -1363,6 +1363,14 @@ pub const Context = struct {
         return if (state == .rom or state == .disabled or layout.flags.rom) null else &ctx.input;
     }
 
+    /// Like `widgetInputMut` but without the widget-`rom` (mouse-off-widget)
+    /// gate, so a drag keeps tracking once the mouse leaves the widget. The
+    /// slider and knob omit the `NK_WIDGET_ROM` check upstream for this reason.
+    fn widgetInputDrag(ctx: *Context, state: WidgetLayoutState) ?*Input {
+        const layout = ctx.current.?.layout.?;
+        return if (state == .disabled or layout.flags.rom) null else &ctx.input;
+    }
+
     /// A labelled checkbox; toggles `active` on click, returns whether it
     /// changed (`nk_checkbox_label`).
     pub fn checkboxLabel(ctx: *Context, lbl: []const u8, active: *bool) !bool {
@@ -1392,7 +1400,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = value.*;
-        value.* = try slider_widget.doSlider(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputMut(w.state), ctx.style.font.?);
+        value.* = try slider_widget.doSlider(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, &ctx.style.slider, ctx.widgetInputDrag(w.state), ctx.style.font.?);
         return value.* != old;
     }
 
@@ -1433,7 +1441,7 @@ pub const Context = struct {
         const w = ctx.widget();
         if (w.state == .invalid) return false;
         const old = value.*;
-        value.* = try knob_widget.doKnob(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_degrees / 360.0, &ctx.style.knob, ctx.widgetInputMut(w.state));
+        value.* = try knob_widget.doKnob(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, min, value.*, max, step, zero_direction, dead_zone_degrees / 360.0, &ctx.style.knob, ctx.widgetInputDrag(w.state));
         return value.* != old;
     }
 
@@ -3002,6 +3010,35 @@ test "button click is detected through the context" {
     const clicked = try ctx.buttonLabel("press");
     ctx.end();
     try std.testing.expect(clicked);
+}
+
+test "slider keeps dragging when the mouse leaves the widget but stays in the window" {
+    var ctx: Context = .init(std.testing.allocator, &test_font);
+    defer ctx.deinit();
+    var val: f32 = 50;
+
+    // frame 1: press on the cursor (mid-bar at value 50; the slider's inner
+    // bounds put the cursor centre near x=145, y=19).
+    ctx.input.begin();
+    ctx.input.motion(145, 19);
+    ctx.input.button(.left, 145, 19, true);
+    _ = try ctx.begin("win", .init(0, 0, 300, 200), .{});
+    ctx.layoutRowDynamic(30, 1);
+    _ = try ctx.sliderFloat(0, &val, 100, 1);
+    ctx.end();
+    ctx.clear();
+    try std.testing.expectEqual(@as(f32, 50), val); // press alone doesn't move it
+
+    // frame 2: hold and drag to the far right, well below the slider row (y=120),
+    // so the widget is read-only (mouse off it) — the drag must still track.
+    ctx.input.begin();
+    ctx.input.motion(286, 120);
+    _ = try ctx.begin("win", .init(0, 0, 300, 200), .{});
+    ctx.layoutRowDynamic(30, 1);
+    _ = try ctx.sliderFloat(0, &val, 100, 1);
+    ctx.end();
+    ctx.clear();
+    try std.testing.expect(val > 50);
 }
 
 test "clicking the close button hides the window next frame" {
