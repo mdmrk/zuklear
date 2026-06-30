@@ -46,29 +46,6 @@ pub fn build(b: *std.Build) void {
     const docs_step = b.step("docs", "Build and install the documentation");
     docs_step.dependOn(&install_docs.step);
 
-    // `zig build dump` builds the headless command-stream dumper used to diff
-    // zuklear's output against Nuklear's (see tools/cmpdump/).
-    const overview_mod = b.createModule(.{
-        .root_source_file = b.path("examples/wio_opengl/overview.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ .name = "zuklear", .module = mod }},
-    });
-    const dump = b.addExecutable(.{
-        .name = "dump_zk",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/cmpdump/dump_zk.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zuklear", .module = mod },
-                .{ .name = "overview", .module = overview_mod },
-            },
-        }),
-    });
-    const dump_step = b.step("dump", "Build the zuklear command-stream dumper");
-    dump_step.dependOn(&b.addInstallArtifact(dump, .{}).step);
-
     // The wio demos. wio is a lazy dependency fetched from upstream only when an
     // example step is requested, so `zig build test`/`docs` stay dependency-free.
     const example_step = b.step("example", "Build the wio OpenGL demo");

@@ -1,6 +1,3 @@
 .zig-cache/
 zig-out/
 zig-pkg/
-
-# Nuklear upstream checkout, used only by the cmpdump differential test
-tools/cmpdump/nuklear/

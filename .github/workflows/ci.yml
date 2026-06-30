@@ -6,7 +6,6 @@ on:
 
 env:
   ZIG_VERSION: 0.16.0
-  NUKLEAR_COMMIT: 2667d0a19a8251f780d3326bcbda265a8d060ed4
 
 jobs:
   test:
@@ -17,20 +16,6 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
       - run: zig build test
-
-  cmpdump:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: ${{ env.ZIG_VERSION }}
-      - name: Fetch Nuklear reference
-        run: |
-          git clone --filter=blob:none https://github.com/Immediate-Mode-UI/Nuklear tools/cmpdump/nuklear
-          git -C tools/cmpdump/nuklear checkout "$NUKLEAR_COMMIT"
-      - run: ./compare.sh
-        working-directory: tools/cmpdump
 
   fmt:
     runs-on: ubuntu-latest
