@@ -2,7 +2,8 @@
 //!
 //! Persistent demo state (Nuklear's `static` locals) lives in `State`, created
 //! once by the caller and threaded through. Sections needing not-yet-ported
-//! subsystems are marked `TODO` inline.
+//! subsystems are marked `TODO` inline. The Selectable section adds a "List
+//! View" node (not in upstream overview.c) to exercise `list_view`.
 
 const std = @import("std");
 const zk = @import("zuklear");
@@ -84,6 +85,7 @@ pub const State = struct {
     // Widgets > Selectable
     sel_list: [4]bool = .{ false, false, true, false },
     sel_grid: [16]bool = .{ true, false, false, false, false, true, false, false, false, false, true, false, false, false, false, true },
+    lv_selected: i32 = -1, // selected row in the List View demo (-1 = none)
 
     // Chart
     chart_show_markers: bool = true,
@@ -390,6 +392,24 @@ fn widgetsSelectable(ctx: *zk.Context, st: *State) !void {
                     if (y > 0) st.sel_grid[i - 4] = !st.sel_grid[i - 4];
                     if (y < 3) st.sel_grid[i + 4] = !st.sel_grid[i + 4];
                 }
+            }
+            ctx.treePop();
+        }
+        // A virtualized list of 1000 rows: only the visible ones are emitted.
+        if (try ctx.treePush(.node, "List View", .minimized, 60)) {
+            ctx.layoutRowDynamic(140, 1);
+            var lv: zk.ListView = .{};
+            if (try ctx.listViewBegin(&lv, "lv_demo", .{ .border = true }, 20, 1000)) {
+                ctx.layoutRowDynamic(20, 1);
+                var i = lv.begin;
+                while (i < lv.end) : (i += 1) {
+                    var sel = i == st.lv_selected;
+                    var buf: [32]u8 = undefined;
+                    if (try ctx.selectableLabel(try std.fmt.bufPrint(&buf, "Item {d}", .{i}), .text_left, &sel)) {
+                        st.lv_selected = if (sel) i else -1;
+                    }
+                }
+                ctx.listViewEnd(&lv);
             }
             ctx.treePop();
         }
