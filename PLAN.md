@@ -146,8 +146,8 @@ click-to-type** editing; **group scrollbars** + cross-frame scroll persistence;
 renderer **arcs/curves** and **images** (software hook + vertex per-batch
 textures); `contextual` (right-click) and `tooltip` (via `nonblockBegin`);
 blocking `popup`; `list_view` (virtualized over `group`); slider inc/dec buttons
-(`show_buttons`). Remaining (minor; reuse existing foundations): image and
-9-slice selectable variants, multi-line selection highlight.
+(`show_buttons`); image-icon selectable. Remaining (minor; reuse existing
+foundations): multi-line selection highlight.
 
 CI: `.github/workflows/ci.yml` runs `zig build test`, `zig fmt --check` and a
 docs deploy; `zig build docs` emits the autodoc site.

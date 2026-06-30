@@ -1,6 +1,6 @@
 //! Selectable widget, ported from `nuklear_selectable.c`. A toggleable labelled
 //! row (used by lists, combos and menus) with separate inactive/active colors.
-//! Image-icon variants are deferred; covers text and symbol selectables.
+//! Covers text, symbol-icon and image-icon variants.
 
 const std = @import("std");
 const math = @import("math.zig");
@@ -13,6 +13,7 @@ const widget = @import("widget.zig");
 const button = @import("button.zig");
 const text_widget = @import("text.zig");
 const symbol_mod = @import("symbol.zig");
+const image_mod = @import("image.zig");
 
 const Rect = math.Rect;
 const Color = color.Color;
@@ -22,8 +23,12 @@ const CommandBuffer = command.CommandBuffer;
 const Input = input_mod.Input;
 const UserFont = font_mod.UserFont;
 const States = widget.States;
+const Image = image_mod.Image;
 
-fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelectable, active: bool, bounds: Rect, icon: ?Rect, sym: style_mod.Symbol, string: []const u8, alignment: Align, font: *const UserFont) !void {
+/// What to draw in a selectable's icon slot, if any.
+const Icon = union(enum) { none, symbol: style_mod.Symbol, image: Image };
+
+fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelectable, active: bool, bounds: Rect, icon_rect: ?Rect, icon: Icon, string: []const u8, alignment: Align, font: *const UserFont) !void {
     const bg = if (!active)
         (if (state.actived) style.pressed else if (state.hover) style.hover else style.normal)
     else
@@ -44,7 +49,11 @@ fn drawSelectable(out: *CommandBuffer, state: States, style: *const StyleSelecta
             try out.fillRect(bounds, style.rounding, col);
         },
     }
-    if (icon) |ic| try symbol_mod.drawSymbol(out, sym, ic, text_bg, fg, 1, font);
+    if (icon_rect) |ic| switch (icon) {
+        .none => {},
+        .symbol => |sym| try symbol_mod.drawSymbol(out, sym, ic, text_bg, fg, 1, font),
+        .image => |img| try out.drawImage(ic, img, Color.white.factor(style.color_factor)),
+    };
     try text_widget.widgetText(out, bounds, string, alignment, style.padding, text_bg, fg, font);
 }
 
@@ -66,6 +75,20 @@ pub fn doSelectable(state: *States, out: *CommandBuffer, bounds: Rect, str: []co
     return old != value.*;
 }
 
+/// The icon square next to the label: opposite the text alignment, inset by
+/// `padding`. Shared by the symbol and image variants (`nk_do_selectable_*`).
+fn iconRect(bounds: Rect, alignment: Align, style: *const StyleSelectable) Rect {
+    var icon: Rect = .{
+        .y = bounds.y + style.padding.y,
+        .w = bounds.h - 2 * style.padding.y,
+        .h = bounds.h - 2 * style.padding.y,
+    };
+    if (alignment.left) {
+        icon.x = @max((bounds.x + bounds.w) - (2 * style.padding.x + icon.w), 0);
+    } else icon.x = bounds.x + 2 * style.padding.x;
+    return icon;
+}
+
 /// Like `doSelectable` but draws a symbol icon next to the label
 /// (`nk_do_selectable` symbol variant). The icon sits opposite the text
 /// alignment.
@@ -79,17 +102,35 @@ pub fn doSelectableSymbol(state: *States, out: *CommandBuffer, bounds: Rect, sym
     };
     if (button.behavior(state, touch, in, .default)) value.* = !value.*;
 
-    var icon: Rect = .{
-        .y = bounds.y + style.padding.y,
-        .w = bounds.h - 2 * style.padding.y,
-        .h = bounds.h - 2 * style.padding.y,
-    };
-    if (alignment.left) {
-        icon.x = @max((bounds.x + bounds.w) - (2 * style.padding.x + icon.w), 0);
-    } else icon.x = bounds.x + 2 * style.padding.x;
+    const icon = iconRect(bounds, alignment, style);
 
     if (style.draw_begin) |cb| cb(out, style.userdata);
-    try drawSelectable(out, state.*, style, value.*, bounds, icon, sym, str, alignment, font);
+    try drawSelectable(out, state.*, style, value.*, bounds, icon, .{ .symbol = sym }, str, alignment, font);
+    if (style.draw_end) |cb| cb(out, style.userdata);
+    return old != value.*;
+}
+
+/// Like `doSelectable` but draws an image icon next to the label
+/// (`nk_do_selectable_image`). The icon sits opposite the text alignment and is
+/// inset by `style.image_padding`.
+pub fn doSelectableImage(state: *States, out: *CommandBuffer, bounds: Rect, img: Image, str: []const u8, alignment: Align, value: *bool, style: *const StyleSelectable, in: ?*const Input, font: *const UserFont) !bool {
+    const old = value.*;
+    const touch: Rect = .{
+        .x = bounds.x - style.touch_padding.x,
+        .y = bounds.y - style.touch_padding.y,
+        .w = bounds.w + style.touch_padding.x * 2,
+        .h = bounds.h + style.touch_padding.y * 2,
+    };
+    if (button.behavior(state, touch, in, .default)) value.* = !value.*;
+
+    var icon = iconRect(bounds, alignment, style);
+    icon.x += style.image_padding.x;
+    icon.y += style.image_padding.y;
+    icon.w -= 2 * style.image_padding.x;
+    icon.h -= 2 * style.image_padding.y;
+
+    if (style.draw_begin) |cb| cb(out, style.userdata);
+    try drawSelectable(out, state.*, style, value.*, bounds, icon, .{ .image = img }, str, alignment, font);
     if (style.draw_end) |cb| cb(out, style.userdata);
     return old != value.*;
 }
@@ -115,4 +156,29 @@ test "selectable toggles on click" {
     const changed = try doSelectable(&state, &buf, .init(0, 0, 100, 20), "item", Align.text_left, &value, &style, &in, &test_font);
     try std.testing.expect(changed);
     try std.testing.expect(value);
+}
+
+test "image selectable toggles and draws an image icon" {
+    const style = style_mod.Style.default().selectable;
+    var buf: CommandBuffer = .init(std.testing.allocator);
+    defer buf.deinit();
+    buf.use_clipping = false;
+
+    var in: Input = .{};
+    in.begin();
+    in.mouse.pos = .{ .x = 20, .y = 10 };
+    in.button(.left, 20, 10, true);
+
+    var state: States = .{};
+    var value = false;
+    const changed = try doSelectableImage(&state, &buf, .init(0, 0, 100, 20), Image.fromId(7), "item", Align.text_left, &value, &style, &in, &test_font);
+    try std.testing.expect(changed);
+    try std.testing.expect(value);
+
+    var saw_image = false;
+    for (buf.commands.items) |c| switch (c) {
+        .image => saw_image = true,
+        else => {},
+    };
+    try std.testing.expect(saw_image);
 }

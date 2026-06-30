@@ -1480,6 +1480,14 @@ pub const Context = struct {
         return selectable_widget.doSelectableSymbol(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, sym, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
     }
 
+    /// A selectable row with an image icon (`nk_selectable_image_label`).
+    pub fn selectableImageLabel(ctx: *Context, img: image_mod.Image, str: []const u8, alignment: Align, value: *bool) !bool {
+        const win = ctx.current.?;
+        const w = ctx.widget();
+        if (w.state == .invalid) return false;
+        return selectable_widget.doSelectableImage(&ctx.last_widget_state, win.layout.?.buffer, w.bounds, img, str, alignment, value, &ctx.style.selectable, ctx.widgetInput(w.state), ctx.style.font.?);
+    }
+
     // --- color picker -----------------------------------------------------
 
     /// A color picker (SV matrix + hue/alpha bars); updates `col`, returns
